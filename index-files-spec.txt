@@ -1,0 +1,71 @@
+Oznaczenia:
+	u8, u16, u24, u32:
+		liczby bez znaku, 8-, 16-, 24-, 32-bitowe, zapisywane od najmniej
+		znaczącego bajtu (czyli w normalnym intelowskim little-endian).
+	align<x>b:
+		nieużywane pola o takiej długości, aby offset kolejnego pola
+		był wielokrotnością <x>.
+	uv:
+		unsigned variable length coding: dzieli bloki na 7-bitowe kawałki,
+		koduje każdy kawałek jako jeden bajt z najwyższym bitem ustawionym
+		dla oznaczenia ostatniego kawałka; kawałki są kodowane od najstarszego
+		do najmłodszego.
+	utfz:
+		napis w utf-8 zakończony znakiem \x00 (znak ten nie jest poprawny w
+		utf-8, więc można go użyć jako terminatora).
+
+--------------------------------------------------------------------------------
+1. TYTUŁY ARTYKUŁÓW
+
+u32: magiczna liczba ('TITL')
+u32: ilość artykułów
+utf8z[]: tytuły artykułów
+
+Rozmiar pliku: około 7.5MB. Struktura przewidziana do wczytania wszystkiego
+do pamięci (stąd brak prostego dostępu do n-tego dokumentu).
+
+--------------------------------------------------------------------------------
+2. SŁOWNIK
+
+u32: magiczna liczba ('DICT')
+???: parametry funkcji hashującej (jeżeli na przykład słowo traktujemy jako
+     współczynniki wielomianu P i mówimy, że hash = (a*P(x)^2 + b*P(x)) % m,
+	 to parametrami są liczby a,b,x,m). z parametrów daje się obilczyć ilość
+	 kubełków.
+u8[]: ilość słów w kubełku
+align16b
+dla każdego kubełka:
+    dla każdego słowa:
+		u32: offset listy postingowej w indeksie lematyzowanym (-1 jeśli nie ma)
+		u32: offset listy postingowej w indeksie pozycyjnym
+dla każdego kubełka:
+    dla każdego słowa:
+		utf8z: słowo
+
+Rozmiar pliku: około 50MB (dla 3.5 miliona słów). Struktura zrobiona tak, aby
+można było wczytać całość do pamięci. Kolejność słow wyznacza kolejność w
+indeksach. Długość listy pozycyjnej różnica offsetów kolejnych list: oblicza się
+to w jednym przebiegu podczas wczytywania.
+
+--------------------------------------------------------------------------------
+3. INDEKS LEMATYZOWANY
+
+u32: magiczna liczba ('IDXL')
+dla każdego słowa (w takiej samej kolejności, jak w słowniku):
+	uv: ilość dokumentów
+	u24: pierwszy dokument
+	uv[]: różnice między numerami dokumentów
+
+--------------------------------------------------------------------------------
+4. INDEKS POZYCYJNY
+
+u32: magiczna liczba ('IDXP')
+dla każdego słowa (w takiej samej kolejności, jak w słowniku):
+	uv: ilość dokumentów
+	u24: pierwszy dokument
+	uv: długość listy pozycyjnej pierwszego dokumentu (czy wystarczy u8?)
+	dla każdego kolejnego dokumentu:
+		uv: różnica między numerami dokumentów
+		uv: długość listy pozycyjnej (czy wystarczy u8?)
+	dla każdego dokumentu:
+		uv[]: różnice między kolejnymi wystąpieniami słowa w dokumencie
