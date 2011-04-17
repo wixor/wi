@@ -6,7 +6,7 @@ void Writer::grow(size_t need)
     size_t size = end - buf,
            left = end - ptr;
 
-    if(size == 0) 
+    if(size == 0)
         size = left = 1;
 
     while(left < need) {
@@ -23,18 +23,18 @@ void Writer::grow(size_t need)
 
 void Writer::write_uv(uint32_t v)
 {
-    if(v >= 0x10000000) 
+    if(v >= 0x10000000)
         write_u8((v >> 28) | 0x80);
-    if(v >= 0x00200000) 
+    if(v >= 0x00200000)
         write_u8((v >> 21) | 0x80);
-    if(v >= 0x00004000) 
+    if(v >= 0x00004000)
         write_u8((v >> 14) | 0x80);
-    if(v >= 0x00000080) 
+    if(v >= 0x00000080)
         write_u8((v >> 7)  | 0x80);
     write_u8(v & 0x7F);
 }
 
-void Writer::write_utf8(uint32_t v)
+void Writer::write_utf8(int v)
 {
     if(v <= 0x0000007F)
         write_u8(v);
@@ -73,9 +73,9 @@ uint32_t Reader::read_uv()
     return ret;
 }
 
-uint32_t Reader::read_utf8()
+int Reader::read_utf8()
 {
-    uint32_t ret = read_u8();
+    int ret = read_u8();
     int cnt; /* # of additional bytes */
 
     if((ret & 0x80) == 0x00)

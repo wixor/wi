@@ -70,8 +70,8 @@ public:
     inline void write_u32(uint32_t v) { v = htole32(v); write_raw(&v, sizeof(v)); }
 
     void write_uv(uint32_t v);
-    void write_utf8(uint32_t v);
-    
+    void write_utf8(int v);
+
     inline void align(int boundary)
     {
         int rem = tell() % boundary;
@@ -93,6 +93,7 @@ public:
  * being read; this helps avoiding nasty bugs in user code.
  *
  * API summary:
+ * - attach: specify the buffer to read from
  * - seek: move current position around
  * - tell: report current position relative to buffer start
  * - eof: check if current position is at end of buffer
@@ -112,11 +113,14 @@ class Reader
     const char *buf, *ptr, *end;
 
 public:
-    /* create Reader; buffer is assumed to start at 'buf' and be 'len' bytes long */
-    Reader(const void *buf, size_t len) :
-        buf((const char *)buf), ptr((const char *)buf), end((const char *)buf+len) { }
+    inline Reader() { }
+    inline Reader(const void *bf, size_t len) { attach(bf, len); }
+    inline void attach(const void *bf, size_t len) {
+        ptr = buf = (const char *)bf;
+        end = buf+len;
+    }
 
-    inline void seek(ssize_t offs, int whence)
+    inline void seek(ssize_t offs, int whence = SEEK_SET)
     {
         switch(whence) {
             case SEEK_CUR: ptr += offs; break;
@@ -129,10 +133,14 @@ public:
     inline size_t tell() const { return ptr - buf; }
     inline bool eof() const { return ptr >= end; }
 
-    inline void read_raw(void *buf, size_t size)
+    inline void read_raw_at(size_t offs, void *out, size_t size) const
     {
-        assert(__builtin_expect(ptr+size <= end, 1));
-        memcpy(buf, ptr, size);
+        assert(__builtin_expect(buf+offs+size <= end, 1));
+        memcpy(out, buf+offs, size);
+    }
+    inline void read_raw(void *out, size_t size)
+    {
+        read_raw_at(tell(), out, size);
         ptr += size;
     }
 
@@ -140,10 +148,10 @@ public:
     inline uint32_t read_u16() { uint16_t ret; read_raw(&ret, sizeof(ret)); return le16toh(ret); }
     inline uint32_t read_u24() { return read_u8() | (read_u16() << 8); }
     inline uint32_t read_u32() { uint32_t ret; read_raw(&ret, sizeof(ret)); return le32toh(ret); }
-    
+
     uint32_t read_uv();
-    uint32_t read_utf8();
-    
+    int read_utf8();
+
     inline void align(int boundary)
     {
         int rem = tell() % boundary;
