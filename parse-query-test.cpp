@@ -23,6 +23,11 @@ static void dump_node(const QueryNode *node, int indent)
             dump_node(node->lhs, 3+indent);
             dump_node(node->rhs, 3+indent);
             return;
+        case QueryNode::PHRASE:
+            printf("PHRASE\n");
+            for(QueryNode *p = node->rhs; p; p = p->rhs)
+                dump_node(p, 3+indent);
+            return;
     }
 }
 

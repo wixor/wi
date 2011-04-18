@@ -37,7 +37,7 @@ class QueryParser
         return c == ' ' || c == '\n' || c == '\t';
     }
     static inline bool isTermSeparator(int c) {
-        return  isWhitespace(c) || c == '|' || c == ')' || c == '(';
+        return  isWhitespace(c) || c == '|' || c == ')' || c == '(' || c == '"';
     }
     bool eatSymbol(int sym)
     {
@@ -67,15 +67,8 @@ class QueryParser
         }
     }
 
-    QueryNode *parse0() /* parentheses + terms */
+    QueryNode *parseTerm()
     {
-        if(eatSymbol('(')) {
-            QueryNode *inside = parse2();
-            if(!eatSymbol(')'))
-                throw "malformed query: unmatched parentheses";
-            return inside;
-        }
-
         eatWhitespace();
 
         size_t start = rd.tell(), end = start;
@@ -90,6 +83,17 @@ class QueryParser
         return start == end ? NULL : makeTermNode(start, end-start);
     }
 
+    QueryNode *parse0() /* parentheses + terms */
+    {
+        if(eatSymbol('(')) {
+            QueryNode *inside = parse2();
+            if(!eatSymbol(')'))
+                throw "unmatched parentheses";
+            return inside;
+        }
+        return parseTerm();
+    }
+
     QueryNode *parse1() /* or-s */
     {
         QueryNode *lhs = parse0();
@@ -97,7 +101,7 @@ class QueryParser
             return lhs;
         QueryNode *rhs = parse1();
         if(!rhs)
-            throw "malformed query: no rhs for '|'";
+            throw "no rhs for '|'";
         return makeOpNode(QueryNode::OR, lhs, rhs);
     }
 
@@ -112,13 +116,37 @@ class QueryParser
         return makeOpNode(QueryNode::AND, lhs, rhs);
     }
 
+    QueryNode *parsePhrase() /* "query" */
+    {
+        if(!eatSymbol('"'))
+            return NULL;
+
+        QueryNode *root = makeOpNode(QueryNode::PHRASE, NULL, NULL);
+
+        QueryNode *last = root;
+        while(!rd.eof()) {
+            QueryNode *term = parseTerm();
+            if(!term) break;
+            talloc_steal(last, term);
+            last->rhs = term;
+            last = term;
+        }
+
+        if(!eatSymbol('"'))
+            throw "unmatched quotes";
+
+        return root;
+    }
+
     QueryNode *parseQuery()
     {
-        QueryNode *root = parse2();
+        QueryNode *root = NULL;
+        if(!root) root = parsePhrase();
+        if(!root) root = parse2();
         eatWhitespace();
 
         if(rd.eof()) return root;
-        throw "malformed query: garbage at end";
+        throw "garbage at end";
     }
 
 public:
@@ -131,7 +159,7 @@ public:
         try {
             root = parseQuery();
         } catch(const char *err) {
-            fprintf(stderr, "%s\n", err);
+            fprintf(stderr, "malformed query: %s\n", err);
         }
 
         if(root) {

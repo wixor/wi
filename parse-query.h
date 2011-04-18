@@ -2,7 +2,7 @@
 #define __PARSE_QUERY_H__
 
 struct QueryNode {
-    enum Type { AND, OR, TERM } type;
+    enum Type { AND, OR, PHRASE, TERM } type;
     QueryNode *rhs, *lhs;
     const char *term;
 };
