@@ -12,8 +12,8 @@
  * Also requirements for buffer are those of Reader.
  *
  * This facility is used for query parsing, so some characters are considered
- * special. Namely, round parentheses and double quote symbol are term
- * separators, but are not whitespace. see isWhitespace vs isTermSeparator.
+ * special. Namely, round parentheses, double quote symbol and pipe symbol
+ * are term separators, but are not whitespace.
  *
  * API summary:
  * - attach, seek, tell, eof, read_utf8: as in Reader
