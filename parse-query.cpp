@@ -11,12 +11,13 @@ class QueryParser
     {
         QueryNode *node = talloc(memctx, QueryNode);
         assert(node);
-        if(memctx == NULL)
-            memctx = node;
         node->type = type;
         node->rhs = rhs;
         node->lhs = lhs;
         node->term = term;
+        if(rhs) talloc_steal(node, rhs);
+        if(lhs) talloc_steal(node, lhs);
+        if(term) talloc_steal(node, term);
         return node;
     }
     QueryNode *makeOpNode(QueryNode::Type type, QueryNode *lhs, QueryNode *rhs)
@@ -25,17 +26,19 @@ class QueryParser
     }
     QueryNode *makeTermNode(size_t offs, size_t len)
     {
-        QueryNode *node = makeNode(QueryNode::TERM, NULL, NULL, NULL);
-
-        char *termcpy = (char *)talloc_size(node, len+1);
+        char *termcpy = (char *)talloc_size(memctx, len+1);
         assert(termcpy);
         rd.read_raw_at(offs, termcpy, len);
         termcpy[len] = '\0';
-        node->term = termcpy;
-
-        return node;
+        return makeNode(QueryNode::TERM, NULL, NULL, termcpy);
     }
 
+    static inline bool isWhitespace(int c) {
+        return c == ' ' || c == '\n' || c == '\t';
+    }
+    static inline bool isTermSeparator(int c) {
+        return  isWhitespace(c) || c == '|' || c == ')' || c == '(';
+    }
     bool eatSymbol(int sym)
     {
         size_t start = rd.tell();
@@ -45,12 +48,23 @@ class QueryParser
             int c = rd.read_utf8();
             if(c == sym)
                 return true;
-            if(c != ' ' && c != '\t')
+            if(!isWhitespace(c))
                 break;
         }
 
         rd.seek(start);
         return false;
+    }
+    void eatWhitespace()
+    {
+        while(!rd.eof()) {
+            size_t where = rd.tell();
+            int c = rd.read_utf8();
+            if(!isWhitespace(c)) {
+                rd.seek(where);
+                break;
+            }
+        }
     }
 
     QueryNode *parse0() /* parentheses + terms */
@@ -62,13 +76,13 @@ class QueryParser
             return inside;
         }
 
-        eatSymbol(' ');
+        eatWhitespace();
 
         size_t start = rd.tell(), end = start;
         while(!rd.eof()) {
             end = rd.tell();
             int c = rd.read_utf8();
-            if(c == ' ' || c == '\t' || c == '|' || c == ')' || c == '(')
+            if(isTermSeparator(c))
                 break;
         }
         rd.seek(end);
@@ -98,19 +112,34 @@ class QueryParser
         return makeOpNode(QueryNode::AND, lhs, rhs);
     }
 
+    QueryNode *parseQuery()
+    {
+        QueryNode *root = parse2();
+        eatWhitespace();
+
+        if(rd.eof()) return root;
+        throw "malformed query: garbage at end";
+    }
+
 public:
     QueryNode *run(const char *query)
     {
-        memctx = NULL;
+        memctx = talloc_new(NULL);
         rd.attach(query, strlen(query));
+        QueryNode *root = NULL;
+
         try {
-            return parse2();
+            root = parseQuery();
         } catch(const char *err) {
-            fputs(err, stderr);
+            fprintf(stderr, "%s\n", err);
         }
-        if(memctx)
-            talloc_free(memctx);
-        return NULL;
+
+        if(root) {
+            talloc_steal(NULL, root);
+            assert(talloc_total_size(memctx) == 0);
+        }
+        talloc_free(memctx);
+        return root;
     }
 };
 

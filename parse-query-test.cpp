@@ -5,6 +5,10 @@
 static void dump_node(const QueryNode *node, int indent)
 {
     printf("%.*s", indent, "                                                                                ");
+    if(!node) {
+        printf("NULL\n");
+        return;
+    }
     switch(node->type) {
         case QueryNode::TERM:
             printf("TERM: »%s«\n", node->term);
@@ -31,6 +35,7 @@ static void process_query()
 
     QueryNode *root = parse_query(buffer);
     dump_node(root, 0);
+    if(root) talloc_free(root);
 }
 
 int main(void)
