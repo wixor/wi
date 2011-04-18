@@ -96,7 +96,9 @@ public:
  * - attach: specify the buffer to read from
  * - seek: move current position around
  * - tell: report current position relative to buffer start
+ * - size: report overall buffer size
  * - eof: check if current position is at end of buffer
+ * - buffer: return buffer being read
  * - read_raw: read raw data from current position
  * - read_u[8/16/24/32]: read little-endian unsigned integer of given size
  * - read_uv: read unsigned integer using variable length encoding
@@ -131,7 +133,9 @@ public:
         assert(buf <= ptr && ptr <= end);
     }
     inline size_t tell() const { return ptr - buf; }
+    inline size_t size() const { return end - buf; }
     inline bool eof() const { return ptr >= end; }
+    inline const void* buffer() const { return buf; }
 
     inline void read_raw_at(size_t offs, void *out, size_t size) const
     {

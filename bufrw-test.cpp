@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <talloc.h>
 #include <algorithm>
 #include "bufrw.h"
 
@@ -7,7 +8,7 @@ static void uv_test()
 {
     const int N = 5*1048576;
     int *buf = (int *)malloc(sizeof(int) * N);
-    
+
     printf("gen\n");
     for(int i=0; i<N/5; i++)
         buf[i] = rand() & 0x7F;
@@ -33,7 +34,7 @@ static void uv_test()
     for(int i=0; i<N; i++)
         assert(rd.read_uv() == buf[i]);
 
-    free(wr.buffer());
+    talloc_free(wr.buffer());
     free(buf);
 }
 
@@ -41,7 +42,7 @@ static void utf8_test()
 {
     const int N = 6*1048576;
     int *buf = (int *)malloc(sizeof(int) * N);
-    
+
     printf("gen\n");
     for(int i=0; i<N/6; i++)
         buf[i] = rand() & 0x7F;
@@ -69,7 +70,7 @@ static void utf8_test()
     for(int i=0; i<N; i++)
         assert(rd.read_utf8() == buf[i]);
 
-    free(wr.buffer());
+    talloc_free(wr.buffer());
     free(buf);
 }
 
@@ -93,7 +94,7 @@ static void endian_test()
     assert(rd.read_u24() == 0x040506);
     assert(rd.read_u32() == 0x0708090a);
 
-    free(wr.buffer());
+    talloc_free(wr.buffer());
 }
 
 int main(void)

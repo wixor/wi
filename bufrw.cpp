@@ -1,4 +1,4 @@
-#include <stdlib.h>
+#include <talloc.h>
 #include "bufrw.h"
 
 void Writer::grow(size_t need)
@@ -14,7 +14,7 @@ void Writer::grow(size_t need)
         size += size;
     }
 
-    buf = (char *)realloc(buf, size);
+    buf = (char *)talloc_realloc_size(NULL, buf, size);
     assert(buf);
 
     end = buf + size;
