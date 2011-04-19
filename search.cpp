@@ -1,77 +1,17 @@
 #include <talloc.h>
 #include "bufrw.h"
-#include "parse-query.h"
+#include "term.h"
 
-bool TermReader::isWhitespace(int c)
+/* -------------------------------------------------------------------------- */
+
+struct QueryNode
 {
-    static const char stopchars[] =
-        " \n\t\r`~!@#$%^&*-_=+\[]{};':,./<>?";
-    for(const char *p = stopchars; *p; p++)
-        if(c == *p)
-            return true;
-    return false;
-}
-bool TermReader::isTermSeparator(int c) {
-    return isWhitespace(c) || c == '|' || c == ')' || c == '(' || c == '"';
-}
+    enum { AND, OR, PHRASE, TERM };
+    QueryNode *lhs, *rhs;
 
-bool TermReader::eatSymbol(int sym)
-{
-    size_t start = tell();
-
-    while(!eof())
-    {
-        int c = read_utf8();
-        if(c == sym)
-            return true;
-        if(!isWhitespace(c))
-            break;
-    }
-
-    seek(start);
-    return false;
-}
-
-int TermReader::eatWhitespace()
-{
-    int count = 0;
-    while(!eof()) {
-        size_t where = tell();
-        int c = read_utf8();
-        if(!isWhitespace(c)) {
-            seek(where);
-            break;
-        }
-        count++;
-    }
-    return count;
-}
-
-char *TermReader::readTerm(void *memctx)
-{
-    eatWhitespace();
-
-    size_t start = tell(), end = start;
-    while(!eof()) {
-        end = tell();
-        int c = read_utf8();
-        if(isTermSeparator(c))
-            break;
-    }
-    seek(end);
-
-    if(start == end)
-        return NULL;
-
-    size_t len = end-start;
-    char *term = (char *)talloc_size(memctx, len+1);
-    assert(term);
-
-    rd.read_raw_at(start, term, len);
-    term[len] = '\0';
-
-    return term;
-}
+    const char *term_text;
+    int term_id;
+};
 
 /* -------------------------------------------------------------------------- */
 
@@ -87,21 +27,19 @@ class QueryParser
     QueryNode *parse2(); /* and-s */
     QueryNode *parsePhrase(); /* "query" */
     QueryNode *parseQuery();
+
 public:
-    QueryNode *run(const char *query);
+    QueryNode *run(const void *mc2, const char *query);
 };
 
 QueryNode *QueryParser::makeNode(QueryNode::Type type, QueryNode *lhs, QueryNode *rhs, const char *term) const
 {
-    QueryNode *node = talloc(memctx, QueryNode);
+    QueryNode *node = talloc_zero(memctx, QueryNode);
     assert(node);
     node->type = type;
     node->rhs = rhs;
     node->lhs = lhs;
     node->term = term;
-    if(rhs) talloc_steal(node, rhs);
-    if(lhs) talloc_steal(node, lhs);
-    if(term) talloc_steal(node, term);
     return node;
 }
 
@@ -176,28 +114,24 @@ QueryNode *QueryParser::parseQuery()
     throw "garbage at end";
 }
 
-QueryNode *QueryParser::run(const char *query)
+QueryNode *QueryParser::run(const void *mc2, const char *query)
 {
-    memctx = talloc_new(NULL);
+    memctx = talloc_new(mc2);
     trd.attach(query, strlen(query));
-    QueryNode *root = NULL;
 
     try {
-        root = parseQuery();
+        return parseQuery();
     } catch(const char *err) {
         fprintf(stderr, "malformed query: %s\n", err);
     }
 
-    if(root) {
-        talloc_steal(NULL, root);
-        assert(talloc_total_size(memctx) == 0);
-    }
     talloc_free(memctx);
-    return root;
+    return NULL;
 }
 
-struct QueryNode* parse_query(const char *query)
+/* -------------------------------------------------------------------------- */
+
+int main(void)
 {
-    QueryParser qp;
-    return qp.run(query);
+    return 0;
 }

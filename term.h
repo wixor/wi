@@ -1,5 +1,5 @@
-#ifndef __PARSE_QUERY_H__
-#define __PARSE_QUERY_H__
+#ifndef __TERM_H__
+#define __TERM_H__
 
 #include <stdlib.h>
 #include "bufrw.h"
@@ -48,12 +48,13 @@ public:
     char *readTerm(void *memctx = NULL);
 };
 
-struct QueryNode {
-    enum Type { AND, OR, PHRASE, TERM } type;
-    QueryNode *rhs, *lhs;
-    const char *term;
+
+struct TermHasher
+{
+    int a,b, n;
+    int hash(const char *term, size_t len) const;
+    inline int buckets() const { return n; }
 };
 
-QueryNode* parse_query(const char *query);
 
 #endif
