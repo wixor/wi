@@ -9,6 +9,13 @@
 #include <endian.h>
 #include <sys/types.h>
 
+#ifndef likely
+#define likely(x) __builtin_expect(!!(x), 1)
+#endif
+#ifndef unlikely
+#define unlikely(x) __builtin_expect(!!(x), 0)
+#endif
+
 /*
  * Writer: write to auto-growing memory buffer
  *
@@ -51,7 +58,7 @@ public:
 
     inline void skip(size_t size)
     {
-        if(__builtin_expect(ptr + size > end, 0))
+        if(unlikely(ptr + size > end))
             grow(size);
         memset(ptr, 0, size);
         ptr += size;
@@ -59,7 +66,7 @@ public:
 
     inline void write_raw(const void *v, size_t size)
     {
-        if(__builtin_expect(ptr + size > end, 0))
+        if(unlikely(ptr + size > end))
             grow(size);
         memcpy(ptr, v, size);
         ptr += size;
@@ -141,7 +148,7 @@ public:
 
     inline void read_raw_at(size_t offs, void *out, size_t size) const
     {
-        assert(__builtin_expect(buf+offs+size <= end, 1));
+        assert(likely(buf+offs+size <= end));
         memcpy(out, buf+offs, size);
     }
     inline void read_raw(void *out, size_t size)
@@ -181,14 +188,14 @@ public:
     inline off_t seek(off_t offs, int whence = SEEK_SET) const
     {
         off_t ret = lseek(fd, offs, whence);
-        assert(__builtin_expect(ret != -1, 1));
+        assert(likely(ret != -1));
         return ret;
     }
     inline off_t size() const
     {
         off_t here = tell();
         off_t ret = lseek(fd, 0, SEEK_END);
-        assert(__builtin_expect(ret != -1, 1));
+        assert(likely(ret != -1));
         seek(here);
         return ret;
     }
@@ -196,7 +203,7 @@ public:
     {
         off_t here = tell();
         off_t ret = lseek(fd, 0, SEEK_END);
-        assert(__builtin_expect(ret != -1, 1));
+        assert(likely(ret != -1));
         seek(here);
         return ret-here;
     }
@@ -204,31 +211,29 @@ public:
     inline bool eof() const { return left() == 0; }
     inline int filedes() const { return fd; }
 
-    inline void read_raw_at(off_t offs, void *out, size_t size) const
+    inline void read_raw(void *out, size_t size, off_t offs = -1) const
     {
-        ssize_t rd = pread(fd, out, size, offs);
-        if(__builtin_expect(rd != (ssize_t)size, 0))
+        ssize_t rd =
+            offs != -1 ? pread(fd, out, size, offs)
+                       : read(fd, out, size);
+        if(unlikely(rd != (ssize_t)size))
             read_error(rd, size);
     }
 
-    inline void read_raw(void *out, size_t size) const
+    inline void *read_raw_alloc(size_t size, off_t offs = -1) const
     {
-        ssize_t rd = read(fd, out, size);
-        if(__builtin_expect(rd != (ssize_t)size, 0))
-            read_error(rd, size);
+        void *buf = talloc_size(NULL, size);
+        assert(likely(buf));
+        read_raw(buf, size, offs);
+        return buf;
     }
 
-    inline void write_raw_at(off_t offs, const void *v, size_t size) const
+    inline void write_raw(const void *v, size_t size, off_t offs = -1) const
     {
-        ssize_t wr = pwrite(fd, v, size, offs);
-        if(__builtin_expect(wr != (ssize_t)size, 0))
-            write_error(wr, size);
-    }
-
-    inline void write_raw(const void *v, size_t size) const
-    {
-        ssize_t wr = write(fd, v, size);
-        if(__builtin_expect(wr != (ssize_t)size, 0))
+        ssize_t wr =
+            offs != -1 ? pwrite(fd, v, size, offs)
+                       : write(fd, v, size);
+        if(unlikely(wr != (ssize_t)size))
             write_error(wr, size);
     }
 
