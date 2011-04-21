@@ -152,6 +152,7 @@ public:
         const char *p = (const char *)memchr(ptr, byte, end-ptr);
         assert(likely(p));
         ptr = p+1;
+        return ptr-buf;
     }
 
     inline void read_raw_at(size_t offs, void *out, size_t size) const
@@ -191,6 +192,8 @@ class FileIO
     static void write_error(ssize_t wr, size_t size);
 
 public:
+    inline FileIO() { }
+    inline FileIO(int fd) { attach(fd); }
     inline void attach(int fd) { this->fd = fd; }
 
     inline off_t seek(off_t offs, int whence = SEEK_SET) const
