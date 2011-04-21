@@ -107,6 +107,7 @@ public:
  * - size: report overall buffer size
  * - eof: check if current position is at end of buffer
  * - buffer: return buffer being read
+ * - seek_past: advance current position past the first occurence of given byte
  * - read_raw: read raw data from current position
  * - read_u[8/16/24/32]: read little-endian unsigned integer of given size
  * - read_uv: read unsigned integer using variable length encoding
@@ -145,6 +146,13 @@ public:
     inline size_t size() const { return end - buf; }
     inline bool eof() const { return ptr >= end; }
     inline const void* buffer() const { return buf; }
+
+    inline size_t seek_past(uint8_t byte)
+    {
+        const char *p = (const char *)memchr(ptr, byte, end-ptr);
+        assert(likely(p));
+        ptr = p+1;
+    }
 
     inline void read_raw_at(size_t offs, void *out, size_t size) const
     {
