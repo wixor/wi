@@ -50,6 +50,59 @@ struct QueryNode
 
 /* -------------------------------------------------------------------------- */
 
+class Artitles
+{
+    void *memctx;
+    char **titles;
+public:
+    ~Artitles();
+    void read(const char *filename);
+    inline const char *lookup(int key) const { return titles[key]; }
+};
+
+Artitles::~Artitles() {
+    if(memctx)
+        talloc_free(memctx);
+}
+
+void Artitles::read(const char *filename)
+{
+    assert(!memctx);
+
+    memctx = talloc_named_const(NULL, 0, "article titles");
+    assert(memctx);
+
+    Timer timer; timer.start();
+
+    int fd = open(filename, O_RDONLY);
+    if(fd == -1) {
+        perror("opening article titles file failed: open(2)");
+        abort();
+    }
+
+    FileIO fio(fd);
+    off_t size = fio.seek(0, SEEK_END);
+
+    char *data = (char *)fio.read_raw_alloc(size, 0);
+    talloc_steal(memctx, data);
+    Reader rd(data, size);
+
+    assert(rd.read_u32() == 0x4c544954);
+    int n_articles = rd.read_u32();
+
+    titles = talloc_array(memctx, char *, n_articles);
+    assert(titles);
+    for(int i=0; i<n_articles; i++) {
+        titles[i] = data + rd.tell();
+        rd.seek_past('\0');
+    }
+
+    close(fd);
+    printf("article titles read in %.03lf seconds.\n", timer.end());
+}
+
+/* -------------------------------------------------------------------------- */
+
 class Dictionary
 {
     struct PostingList {
@@ -68,7 +121,6 @@ class Dictionary
     TermHasher hasher;
     PostingList *lemmatized, *positional;
     Term *terms, **buckets;
-    char *term_texts;
 
     void do_read(Reader rd);
 
@@ -150,8 +202,8 @@ void Dictionary::do_read(Reader rd)
     /* allocate stuff */
     lemmatized = talloc_array(memctx, PostingList, lemmatized_list_count+1);
     positional = talloc_array(memctx, PostingList, term_count+1);
-    terms = talloc_array(memctx, Term, term_count);
     buckets = talloc_array(memctx, Term*, bucket_count+1);
+    terms = talloc_array(memctx, Term, term_count);
     assert(lemmatized && positional && terms && buckets);
 
     { /* read bucket info */
@@ -189,7 +241,7 @@ void Dictionary::do_read(Reader rd)
         term_texts_length += terms[i].text_length;
 
     /* read term texts */
-    term_texts = (char *)talloc_size(memctx, term_texts_length);
+    char *term_texts = (char *)talloc_size(memctx, term_texts_length);
     assert(term_texts);
     rd.read_raw(term_texts, term_texts_length);
 
