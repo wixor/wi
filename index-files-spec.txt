@@ -28,33 +28,36 @@ do pamięci (stąd brak prostego dostępu do n-tego dokumentu).
 2. SŁOWNIK
 
 u32: magiczna liczba ('DICT')
-3*u32???: parametry a,b,n, funkcji hashującej (słowo traktujemy jako liczbę
-    zapisaną w systemie 256-tkowym od najstarszej do najmłodszej pozycji;
-    hashem słowa x jest wartość ((ax+b) % mod) % n, gdzie mod = 2012345669.
-    ilością kubełków jest n.
+3*u32: parametry a,b,n, funkcji hashującej (słowo traktujemy jako liczbę
+       zapisaną w systemie 256-tkowym od najstarszej do najmłodszej pozycji;
+       hashem słowa x jest wartość ((ax+b) % mod) % n, gdzie mod = 2012345669.
+       ilością kubełków jest n.
+u32: ilość list lematyzowanych
 u8[]: ilość słów w kubełku
-u8[]: długości kolejnych słów.
 dla każdego kubełka:
     dla każdego słowa:
-        u32: offset listy w indeksie lematyzowanym
-        u32: offset listy w indeksie pozycyjnym
-        u24: długość listy w indeksie lematyzowanym (w bajtach)
-        u24: długość listy w indeksie pozycyjnym (w bajtach)
-        u24: ilość wpisów na lematyzowanej liście postingowej
-        u24: ilość wpisów na pozycyjnej liście postingowej
-dla każdego kubełka:
-    dla każdego słowa:
-        utf8: słowo
+        u24: numer listy lematyzowanej
+        u8: długość słowa
+dla każdej listy pozycyjnej:
+    uv: długość w bajtach
+    uv: ilość wpisów
+dla każdej listy lematyzowanej:
+    uv: długość w bajtach
+    uv: ilość wpisów
+dla każdego słowa:
+    utf8: słowo
 
-Rozmiar pliku: około 75MB (dla 3.5 miliona słów). Struktura zrobiona tak, aby
-można było wczytać całość do pamięci. Kolejność słow wyznacza kolejność w
-indeksach.
+Rozmiar pliku: nie wiadomo, może z 50MB. Struktura zrobiona tak, aby
+można było wczytać całość do pamięci. Kolejność słów wyznacza kolejność w
+indeksie pozycyjnym (ale nie w lematyzowanym), gdzie każde słowo ma swoją
+własną listę. W indeksie lematyzowanym listy mogą być współdzielone, to znaczy
+wiele słów może wskazywać na tą samą listę.
 
 --------------------------------------------------------------------------------
 3. INDEKS LEMATYZOWANY
 
 u32: magiczna liczba ('IDXL')
-dla każdego słowa (w takiej samej kolejności, jak w słowniku):
+dla każdego słowa:
     u24: pierwszy dokument
     uv[]: różnice między numerami dokumentów
 
@@ -62,7 +65,7 @@ dla każdego słowa (w takiej samej kolejności, jak w słowniku):
 4. INDEKS POZYCYJNY
 
 u32: magiczna liczba ('IDXP')
-dla każdego słowa (w takiej samej kolejności, jak w słowniku):
+dla każdego słowa (w kolejności takiej jak w słowniku)
     u24: pierwszy dokument
     uv: długość listy pozycyjnej pierwszego dokumentu (czy wystarczy u8?)
     dla każdego kolejnego dokumentu:
