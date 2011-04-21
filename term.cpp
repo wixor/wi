@@ -47,7 +47,7 @@ int TermReader::eatWhitespace()
     return count;
 }
 
-char *TermReader::readTerm(void *memctx)
+char *TermReader::readTerm()
 {
     eatWhitespace();
 
@@ -64,7 +64,7 @@ char *TermReader::readTerm(void *memctx)
         return NULL;
 
     size_t len = end-start;
-    char *term = (char *)talloc_size(memctx, len+1);
+    char *term = (char *)talloc_size(NULL, len+1);
     assert(term);
 
     rd.read_raw_at(start, term, len);

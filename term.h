@@ -24,7 +24,7 @@
  *      returns number of symbols read.
  * - readTerm: read one term, possibly preceded with some whitespace, create
  *      its copy and return it. stream position is placed just after last
- *      symbol read. memory for copy is allocated with talloc from given memctx.
+ *      symbol read. memory for copy is allocated with talloc.
  */
 class TermReader
 {
@@ -37,7 +37,7 @@ public:
     inline void attach(const void *buf, size_t len) {
         rd.attach(buf, len);
     }
-    inline void seek(ssize_t offs, int whence = SEEK_SET) { return rd.seek(offs, whence); }
+    inline off_t seek(ssize_t offs, int whence = SEEK_SET) { return rd.seek(offs, whence); }
     inline size_t tell() const { return rd.tell(); }
     inline bool eof() const { return rd.eof(); }
 
@@ -45,7 +45,7 @@ public:
 
     bool eatSymbol(int c);
     int eatWhitespace();
-    char *readTerm(void *memctx = NULL);
+    char *readTerm();
 };
 
 
