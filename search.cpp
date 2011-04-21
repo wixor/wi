@@ -11,6 +11,10 @@
 
 /* -------------------------------------------------------------------------- */
 
+#define info(fmt, ...) fprintf(stderr, fmt, ## __VA_ARGS__)
+
+/* -------------------------------------------------------------------------- */
+
 class Timer
 {
     struct timespec ts;
@@ -38,15 +42,14 @@ struct QueryNode
 {
     enum Type { AND, OR, PHRASE, TERM } type;
 
-    QueryNode *lhs, *rhs;
-    int deps; /* unmet dependencies for the node */
+    QueryNode *lhs, *rhs, *parent;
 
     const char *term_text; /* actual term text */
     int term_id; /* index of term in dictionary */
-    uint32_t posting_offs; /* posting list offset in index */
 
+    bool postings_ready; /* if posting list is available */
     int posting_count; /* #of entries in posting list */
-    int *postings; /* actual posting list */
+    void *postings; /* actual posting list */
 };
 
 /* -------------------------------------------------------------------------- */
@@ -56,14 +59,17 @@ class Artitles
     void *memctx;
     char **titles;
 public:
+    Artitles();
     ~Artitles();
     void read(const char *filename);
     inline const char *lookup(int key) const { return titles[key]; }
 };
 
+Artitles::Artitles() {
+    memctx = NULL;
+}
 Artitles::~Artitles() {
-    if(memctx)
-        talloc_free(memctx);
+    if(memctx) talloc_free(memctx);
 }
 
 void Artitles::read(const char *filename)
@@ -98,8 +104,14 @@ void Artitles::read(const char *filename)
     }
 
     close(fd);
-    printf("article titles read in %.03lf seconds.\n", timer.end());
+    info("article titles read in %.03lf seconds.\n", timer.end());
 }
+
+/* -------------------------------------------------------------------------- */
+
+enum IndexType {
+    POSITIONAL, LEMMATIZED
+};
 
 /* -------------------------------------------------------------------------- */
 
@@ -127,22 +139,24 @@ class Dictionary
 public:
     struct PostingListInfo {
         off_t offset;
-        int length;
+        int size;
         int n_entries;
     };
 
+    Dictionary();
     ~Dictionary();
 
     void read(const char *filename);
     int lookup(const char *text, size_t len) const;
 
-    inline PostingListInfo getLemmatizedIndexInfo(int key) const;
-    inline PostingListInfo getPositionalIndexInfo(int key) const;
+    inline PostingListInfo getPostingListInfo(int key, IndexType idxtype) const;
 };
 
+Dictionary::Dictionary() {
+    memctx = NULL;
+}
 Dictionary::~Dictionary() {
-    if(memctx)
-        talloc_free(memctx);
+    if(memctx) talloc_free(memctx);
 }
 
 void Dictionary::read(const char *filename)
@@ -173,7 +187,7 @@ void Dictionary::read(const char *filename)
 
     munmap(data, size);
     close(fd);
-    printf("dictionary read in %.03lf seconds\n", timer.end());
+    info("dictionary read in %.03lf seconds\n", timer.end());
 }
 
 void Dictionary::do_read(Reader rd)
@@ -268,23 +282,14 @@ int Dictionary::lookup(const char *text, size_t len) const
     return -1;
 }
 
-Dictionary::PostingListInfo Dictionary::getLemmatizedIndexInfo(int key) const
+Dictionary::PostingListInfo Dictionary::getPostingListInfo(int key, IndexType idxtype) const
 {
-    int list_id = terms[key].lemmatized_list_id;
+    int list_id = idxtype == LEMMATIZED ? terms[key].lemmatized_list_id : key;
 
     PostingListInfo ret;
     ret.offset = lemmatized[list_id].offset;
-    ret.length = lemmatized[list_id+1].offset - ret.offset;
+    ret.size = lemmatized[list_id+1].offset - ret.offset;
     ret.n_entries = lemmatized[list_id].n_entries;
-    return ret;
-}
-
-Dictionary::PostingListInfo Dictionary::getPositionalIndexInfo(int key) const
-{
-    PostingListInfo ret;
-    ret.offset = positional[key].offset;
-    ret.length = positional[key+1].offset - ret.offset;
-    ret.n_entries = positional[key].n_entries;
     return ret;
 }
 
@@ -296,7 +301,7 @@ public:
     struct ReadRq {
         off_t offset;
         int size;
-        void **dest;
+        void *data;
     };
 
 private:
@@ -306,22 +311,21 @@ private:
 
     pthread_t thread;
     pthread_mutex_t lock;
-    const ReadRq *rqs;
+    ReadRq *rqs;
     int rqs_count, fd;
 
     static int openIndex(const char *filename, uint32_t magic);
     static void* runThreadFunc(void *);
     void threadFunc();
-    void request(const ReadRq *rqs, int count, bool positional);
 
 public:
+    PostingsReader();
     ~PostingsReader();
 
     void start(const char *positional_filename, const char *lemmatized_filename);
     void stop();
 
-    inline void readPositional(const ReadRq *rqs, int count) { request(rqs, count, true); }
-    inline void readLemmatized(const ReadRq *rqs, int count) { request(rqs, count, false); }
+    void request(ReadRq *rqs, int count, IndexType idxtype);
     int wait();
 };
 
@@ -341,7 +345,7 @@ void PostingsReader::threadFunc()
 
         FileIO fio(fd);
         for(int i=0; i<rqs_count; i++) {
-            *rqs[i].dest = fio.read_raw_alloc(rqs[i].size, rqs[i].offset);
+            rqs[i].data = fio.read_raw_alloc(rqs[i].size, rqs[i].offset);
             eventfd_write(evfd, 1);
         }
         fd = -1;
@@ -350,10 +354,11 @@ void PostingsReader::threadFunc()
     }
 }
 
-PostingsReader::~PostingsReader()
-{
-    if(memctx)
-        stop();
+PostingsReader::PostingsReader() {
+    memctx = NULL;
+}
+PostingsReader::~PostingsReader() {
+    if(memctx) stop();
 }
 
 int PostingsReader::openIndex(const char *filename, uint32_t magic)
@@ -397,10 +402,10 @@ void PostingsReader::stop()
     talloc_free(memctx);
 }
 
-void PostingsReader::request(const ReadRq *rqs, int count, bool positional)
+void PostingsReader::request(ReadRq *rqs, int count, IndexType idxtype)
 {
     pthread_mutex_lock(&lock);
-    fd = positional ? positional_fd : lemmatized_fd;
+    fd = idxtype == POSITIONAL ? positional_fd : lemmatized_fd;
     this->rqs = rqs;
     rqs_count = count;
     eventfd_write(evfd, 1);
@@ -409,11 +414,172 @@ void PostingsReader::request(const ReadRq *rqs, int count, bool positional)
 
 int PostingsReader::wait(void)
 {
-    assert(fd != -1);
+    if(fd == -1)
+        return 0;
 
     uint64_t val;
     eventfd_read(evfd, &val);
     return val;
+}
+
+/* -------------------------------------------------------------------------- */
+
+/* GLOBALS */
+static Artitles artitles;
+static Dictionary dictionary;
+static PostingsReader posrdr;
+
+/* -------------------------------------------------------------------------- */
+
+static void resolve_terms(QueryNode *node, IndexType idxtype)
+{
+    if(!node) return;
+    if(node->type == QueryNode::TERM)
+    {
+        node->term_id =
+            dictionary.lookup(node->term_text, strlen(node->term_text));
+
+        if(node->term_id == -1)
+            node->posting_count = 0;
+        else {
+            Dictionary::PostingListInfo info =
+                dictionary.getPostingListInfo(node->term_id, idxtype);
+            node->posting_count = info.n_entries;
+        }
+    } else {
+        resolve_terms(node->lhs, idxtype);
+        resolve_terms(node->rhs, idxtype);
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+
+class TreePostingsReader
+{
+    void *memctx;
+
+    IndexType idxtype;
+
+    int term_count, done_wridx, done_rdidx;
+    QueryNode **terms, **done;
+
+    int rqs_count, rqs_rdidx;
+    PostingsReader::ReadRq *rqs;
+    int *term_rq_map;
+
+    inline void markAsDone(QueryNode *node);
+
+    static int countLeaves(QueryNode *node);
+    static int extractLeaves(QueryNode *node, QueryNode **ptr);
+    void killEmptyTerms();
+    void createRqs();
+
+public:
+    void attach(QueryNode *root, IndexType idxtype, void *memctx);
+    QueryNode *wait();
+};
+
+void TreePostingsReader::markAsDone(QueryNode *node) {
+    node->postings_ready = true;
+    done[done_wridx++] = node;
+}
+
+void TreePostingsReader::attach(QueryNode *root, IndexType idxtype, void *memctx)
+{
+    this->idxtype = idxtype;
+    this->memctx = memctx;
+
+    done_rdidx = done_wridx = rqs_count = rqs_rdidx = 0;
+    term_count = countLeaves(root);
+    terms = talloc_array(memctx, QueryNode*, term_count);
+    done = talloc_array(memctx, QueryNode*, term_count);
+    assert(terms && done);
+
+    extractLeaves(root, terms);
+    killEmptyTerms();
+    createRqs();
+    posrdr.request(rqs, rqs_count, idxtype);
+}
+
+QueryNode *TreePostingsReader::wait()
+{
+    if(done_rdidx < done_wridx)
+        return done[done_rdidx++];
+
+    int n = posrdr.wait();
+    while(n--)
+    {
+        PostingsReader::ReadRq *rq = &rqs[rqs_rdidx];
+        talloc_steal(memctx, rq->data);
+
+        for(int i=0; i<term_count; i++)
+            if(term_rq_map[i] == rqs_rdidx) {
+                terms[i]->postings = rq->data;
+                markAsDone(terms[i]);
+            }
+
+        rqs_rdidx++;
+    }
+
+    assert(done_rdidx < done_wridx);
+    return done[done_rdidx++];
+}
+
+int TreePostingsReader::countLeaves(QueryNode *node)
+{
+    if(!node) return 0;
+    if(node->type == QueryNode::TERM)
+        return 1;
+    return countLeaves(node->lhs) + countLeaves(node->rhs);
+}
+int TreePostingsReader::extractLeaves(QueryNode *node, QueryNode **ptr)
+{
+    if(!node) return 0;
+    if(node->type == QueryNode::TERM) {
+        *ptr = node;
+        return 1;
+    }
+    int l = extractLeaves(node->lhs, ptr);
+    int r = extractLeaves(node->rhs, ptr+l);
+    return l+r;
+}
+void TreePostingsReader::killEmptyTerms()
+{
+    int empty = 0;
+    for(int i=0,j=0; i<term_count; i++)
+    {
+        if(terms[i]->posting_count == 0) {
+            markAsDone(terms[i]);
+            empty++;
+        } else
+            terms[j++] = terms[i];
+    }
+    term_count -= empty;
+}
+void TreePostingsReader::createRqs()
+{
+    rqs = talloc_array(memctx, PostingsReader::ReadRq, term_count);
+    assert(rqs);
+
+    for(int i=0; i<term_count; i++)
+    {
+        bool dupli = false;
+        for(int j=0; j<i; j++)
+            if(terms[j]->term_id == terms[i]->term_id) {
+                term_rq_map[i] = term_rq_map[j];
+                dupli = true;
+                break;
+            }
+        if(dupli) continue;
+
+        term_rq_map[i] = rqs_count++;
+        PostingsReader::ReadRq *rq = &rqs[term_rq_map[i]];
+
+        Dictionary::PostingListInfo info =
+            dictionary.getPostingListInfo(terms[i]->term_id, idxtype);
+        rq->offset = info.offset;
+        rq->size = info.size;
+    }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -440,8 +606,9 @@ QueryNode *QueryParser::makeNode(QueryNode::Type type, QueryNode *lhs, QueryNode
     QueryNode *node = talloc_zero(memctx, QueryNode);
     assert(node);
     node->type = type;
-    node->rhs = rhs;
-    node->lhs = lhs;
+    node->rhs = rhs; if(rhs) rhs->parent = node;
+    node->lhs = lhs; if(lhs) lhs->parent = node;
+    node->parent = NULL;
     node->term_text = term;
     return node;
 }
@@ -529,7 +696,7 @@ QueryNode *QueryParser::run(const char *query)
     try {
         return parseQuery();
     } catch(const char *err) {
-        fprintf(stderr, "malformed query: %s\n", err);
+        printf("malformed query: %s\n", err);
     }
 
     talloc_free(memctx);
@@ -538,11 +705,40 @@ QueryNode *QueryParser::run(const char *query)
 
 /* -------------------------------------------------------------------------- */
 
-class QueryExecution
+class QueryEngineBase
 {
+protected:
     void *memctx;
-
 };
+
+/* -------------------------------------------------------------------------- */
+
+class BooleanQueryEngine : public QueryEngineBase
+{
+public:
+    void run(QueryNode *root);
+};
+
+void BooleanQueryEngine::run(QueryNode *root)
+{
+    memctx = talloc_parent(root);
+}
+
+/* -------------------------------------------------------------------------- */
+
+class PhraseQueryEngine : public QueryEngineBase
+{
+public:
+    void run(QueryNode *root);
+};
+
+void PhraseQueryEngine::run(QueryNode *root)
+{
+    memctx = talloc_parent(root);
+}
+
+/* -------------------------------------------------------------------------- */
+
 #if 0
 static void dump_node(const QueryNode *node, int indent)
 {
@@ -572,21 +768,39 @@ static void dump_node(const QueryNode *node, int indent)
             return;
     }
 }
-
-static void process_query()
-{
-    static char buffer[1024];
-
-    printf("Enter query: "); fflush(stdout);
-    fgets(buffer, 1023, stdin);
-
-    QueryNode *root = parse_query(buffer);
-    dump_node(root, 0);
-    if(root) talloc_free(root);
-}
 #endif
+
+static void run_query(const char *query)
+{
+    QueryParser qp;
+    QueryNode *root = qp.run(query);
+    if(!root)
+        return;
+
+    if(root->type == QueryNode::PHRASE) {
+        PhraseQueryEngine e;
+        e.run(root);
+    } else {
+        BooleanQueryEngine e;
+        e.run(root);
+    }
+
+    talloc_free(talloc_parent(root));
+}
 
 int main(void)
 {
+    artitles.read("db/artitles");
+    dictionary.read("db/dictionary");
+    posrdr.start("db/positional", "db/lemmatized");
+
+    for(;;) {
+        static char buffer[1024];
+        printf("Enter query: "); fflush(stdout);
+        if(fgets(buffer, 1023, stdin) == NULL)
+            break;
+        run_query(buffer);
+    }
+
     return 0;
 }
