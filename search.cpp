@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <sys/mman.h>
+#include <sys/eventfd.h>
 #include <talloc.h>
 #include "bufrw.h"
 #include "term.h"
@@ -68,7 +69,6 @@ Artitles::~Artitles() {
 void Artitles::read(const char *filename)
 {
     assert(!memctx);
-
     memctx = talloc_named_const(NULL, 0, "article titles");
     assert(memctx);
 
@@ -148,7 +148,6 @@ Dictionary::~Dictionary() {
 void Dictionary::read(const char *filename)
 {
     assert(!memctx);
-
     memctx = talloc_named_const(NULL, 0, "dictionary");
     assert(memctx);
 
@@ -293,15 +292,129 @@ Dictionary::PostingListInfo Dictionary::getPositionalIndexInfo(int key) const
 
 class PostingsReader
 {
-    struct rq {
+public:
+    struct ReadRq {
         off_t offset;
-        off_t length;
+        int size;
         void **dest;
     };
 
+private:
+    void *memctx;
     int evfd;
+    int lemmatized_fd, positional_fd;
+
     pthread_t thread;
+    pthread_mutex_t lock;
+    const ReadRq *rqs;
+    int rqs_count, fd;
+
+    static int openIndex(const char *filename, uint32_t magic);
+    static void* runThreadFunc(void *);
+    void threadFunc();
+    void request(const ReadRq *rqs, int count, bool positional);
+
+public:
+    ~PostingsReader();
+
+    void start(const char *positional_filename, const char *lemmatized_filename);
+    void stop();
+
+    inline void readPositional(const ReadRq *rqs, int count) { request(rqs, count, true); }
+    inline void readLemmatized(const ReadRq *rqs, int count) { request(rqs, count, false); }
+    int wait();
 };
+
+void* PostingsReader::runThreadFunc(void *arg) {
+    ((PostingsReader*)arg)->threadFunc();
+    return NULL;
+}
+
+void PostingsReader::threadFunc()
+{
+    for(;;)
+    {
+        uint64_t foo;
+        eventfd_read(evfd, &foo);
+
+        pthread_mutex_lock(&lock);
+
+        FileIO fio(fd);
+        for(int i=0; i<rqs_count; i++) {
+            *rqs[i].dest = fio.read_raw_alloc(rqs[i].size, rqs[i].offset);
+            eventfd_write(evfd, 1);
+        }
+        fd = -1;
+
+        pthread_mutex_unlock(&lock);
+    }
+}
+
+PostingsReader::~PostingsReader()
+{
+    if(memctx)
+        stop();
+}
+
+int PostingsReader::openIndex(const char *filename, uint32_t magic)
+{
+    int fd = open(filename, O_RDONLY);
+    if(fd == -1) {
+        perror("failed to open index file: open(2)");
+        abort();
+    }
+
+    uint32_t mg;
+    FileIO fio(fd);
+    fio.read_raw(&mg, sizeof(mg));
+    assert(mg == magic);
+
+    return fd;
+}
+
+void PostingsReader::start(const char *positional_filename, const char *lemmatized_filename)
+{
+    assert(!memctx);
+    memctx = talloc_named_const(NULL, 0, "postings reader");
+    assert(memctx);
+
+    evfd = eventfd(0, 0);
+    assert(evfd != -1);
+
+    positional_fd = openIndex(positional_filename, 0x50584449);
+    lemmatized_fd = openIndex(lemmatized_filename, 0x4c584449);
+    fd = -1;
+
+    pthread_mutex_init(&lock, NULL);
+    assert(pthread_create(&thread, NULL, &runThreadFunc, this) == 0);
+}
+
+void PostingsReader::stop()
+{
+    pthread_cancel(thread);
+    pthread_join(thread, NULL);
+    pthread_mutex_destroy(&lock);
+    talloc_free(memctx);
+}
+
+void PostingsReader::request(const ReadRq *rqs, int count, bool positional)
+{
+    pthread_mutex_lock(&lock);
+    fd = positional ? positional_fd : lemmatized_fd;
+    this->rqs = rqs;
+    rqs_count = count;
+    eventfd_write(evfd, 1);
+    pthread_mutex_unlock(&lock);
+}
+
+int PostingsReader::wait(void)
+{
+    assert(fd != -1);
+
+    uint64_t val;
+    eventfd_read(evfd, &val);
+    return val;
+}
 
 /* -------------------------------------------------------------------------- */
 
