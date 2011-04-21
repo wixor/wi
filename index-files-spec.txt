@@ -33,22 +33,22 @@ u32: magiczna liczba ('DICT')
     hashem słowa x jest wartość ((ax+b) % mod) % n, gdzie mod = 2012345669.
     ilością kubełków jest n.
 u8[]: ilość słów w kubełku
-align16b
+u8[]: długości kolejnych słów.
 dla każdego kubełka:
     dla każdego słowa:
-        u32: offset listy postingowej w indeksie lematyzowanym (-1 jeśli nie ma)
-        u32: offset listy postingowej w indeksie pozycyjnym
-        u32: ilość wpisów na lematyzowanej liście postingowej
-        u32: ilość wpisów na pozycyjnej liście postingowej
+        u32: offset listy w indeksie lematyzowanym
+        u32: offset listy w indeksie pozycyjnym
+        u24: długość listy w indeksie lematyzowanym (w bajtach)
+        u24: długość listy w indeksie pozycyjnym (w bajtach)
+        u24: ilość wpisów na lematyzowanej liście postingowej
+        u24: ilość wpisów na pozycyjnej liście postingowej
 dla każdego kubełka:
     dla każdego słowa:
-        utf8z: słowo
+        utf8: słowo
 
 Rozmiar pliku: około 75MB (dla 3.5 miliona słów). Struktura zrobiona tak, aby
 można było wczytać całość do pamięci. Kolejność słow wyznacza kolejność w
-indeksach. Długość listy pozycyjnej różnica offsetów kolejnych list: oblicza się
-to w jednym przebiegu podczas wczytywania. Ilość wpisów na listach pozycyjnych
-jest potrzeba do optymalizacji zapytania zanim zaczniemy wczytywać listy.
+indeksach.
 
 --------------------------------------------------------------------------------
 3. INDEKS LEMATYZOWANY
