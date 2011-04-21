@@ -1,11 +1,12 @@
 CXX := g++
 CC := g++
+CPPFLAGS := -D_FILE_OFFSET_BITS=64
 CXXFLAGS := -O3 -g -pthread -march=native -Wall
-LDFLAGS := -pthread -ltalloc
+LDFLAGS := -pthread -ltalloc -lrt
 
 all:
 
-parse-query-test: parse-query-test.o parse-query.o bufrw.o
+search: search.o term.o bufrw.o
 bufrw-test: bufrw-test.o bufrw.o
 
 Makefile.deps: $(wildcard *.h *.c *.cpp)
