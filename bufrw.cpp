@@ -101,3 +101,20 @@ int Reader::read_utf8()
 
     return ret;
 }
+
+void FileIO::read_error(ssize_t rd, size_t size)
+{
+    if(rd == -1)
+        fprintf(stderr, "read of %zu bytes failed: %m\n", size);
+    else
+        fprintf(stderr, "read of %zu bytes failed: only %zd read\n", size, rd);
+    abort();
+}
+void FileIO::write_error(ssize_t wr, size_t size)
+{
+    if(wr == -1)
+        fprintf(stderr, "write of %zu bytes failed: %m\n", size);
+    else
+        fprintf(stderr, "write of %zu bytes failed: only %zd written\n", size, wr);
+    abort();
+}

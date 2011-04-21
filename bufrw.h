@@ -1,12 +1,13 @@
 #ifndef __BUFRW_H__
 #define __BUFRW_H__
 
-#include <stdlib.h> /* for ssize_t */
-#include <stdio.h> /* for SEEK_* */
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
 #include <assert.h>
 #include <endian.h>
+#include <sys/types.h>
 
 /*
  * Writer: write to auto-growing memory buffer
@@ -56,11 +57,11 @@ public:
         ptr += size;
     }
 
-    inline void write_raw(const void *buf, size_t size)
+    inline void write_raw(const void *v, size_t size)
     {
         if(__builtin_expect(ptr + size > end, 0))
             grow(size);
-        memcpy(ptr, buf, size);
+        memcpy(ptr, v, size);
         ptr += size;
     }
 
@@ -122,7 +123,7 @@ public:
         end = buf+len;
     }
 
-    inline void seek(ssize_t offs, int whence = SEEK_SET)
+    inline size_t seek(ssize_t offs, int whence = SEEK_SET)
     {
         switch(whence) {
             case SEEK_CUR: ptr += offs; break;
@@ -131,6 +132,7 @@ public:
             default: assert(!"unknown whence"); break;
         }
         assert(buf <= ptr && ptr <= end);
+        return ptr-buf;
     }
     inline size_t tell() const { return ptr - buf; }
     inline size_t size() const { return end - buf; }
@@ -163,5 +165,80 @@ public:
             seek(boundary - rem, SEEK_CUR);
     }
 };
+
+/* -------------------------------------------------------------------------- */
+
+class FileIO
+{
+    int fd;
+
+    static void read_error(ssize_t rd, size_t size);
+    static void write_error(ssize_t wr, size_t size);
+
+public:
+    inline void attach(int fd) { this->fd = fd; }
+
+    inline off_t seek(off_t offs, int whence = SEEK_SET) const
+    {
+        off_t ret = lseek(fd, offs, whence);
+        assert(__builtin_expect(ret != -1, 1));
+        return ret;
+    }
+    inline off_t size() const
+    {
+        off_t here = tell();
+        off_t ret = lseek(fd, 0, SEEK_END);
+        assert(__builtin_expect(ret != -1, 1));
+        seek(here);
+        return ret;
+    }
+    inline off_t left() const
+    {
+        off_t here = tell();
+        off_t ret = lseek(fd, 0, SEEK_END);
+        assert(__builtin_expect(ret != -1, 1));
+        seek(here);
+        return ret-here;
+    }
+    inline off_t tell() const { return seek(0, SEEK_CUR); }
+    inline bool eof() const { return left() == 0; }
+    inline int filedes() const { return fd; }
+
+    inline void read_raw_at(off_t offs, void *out, size_t size) const
+    {
+        ssize_t rd = pread(fd, out, size, offs);
+        if(__builtin_expect(rd != (ssize_t)size, 0))
+            read_error(rd, size);
+    }
+
+    inline void read_raw(void *out, size_t size) const
+    {
+        ssize_t rd = read(fd, out, size);
+        if(__builtin_expect(rd != (ssize_t)size, 0))
+            read_error(rd, size);
+    }
+
+    inline void write_raw_at(off_t offs, const void *v, size_t size) const
+    {
+        ssize_t wr = pwrite(fd, v, size, offs);
+        if(__builtin_expect(wr != (ssize_t)size, 0))
+            write_error(wr, size);
+    }
+
+    inline void write_raw(const void *v, size_t size) const
+    {
+        ssize_t wr = write(fd, v, size);
+        if(__builtin_expect(wr != (ssize_t)size, 0))
+            write_error(wr, size);
+    }
+
+    inline void align(int boundary) const
+    {
+        int rem = tell() % boundary;
+        if(rem)
+            seek(boundary - rem, SEEK_CUR);
+    }
+};
+
 
 #endif
