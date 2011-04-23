@@ -1,21 +1,119 @@
 Oznaczenia:
-    u8, u16, u24, u32:
-        liczby bez znaku, 8-, 16-, 24-, 32-bitowe, zapisywane od najmniej
+    u8, u16, u24, u32, u64:
+        liczby bez znaku, 8-, 16-, 24-, 32, 64-bitowe, zapisywane od najmniej
         znaczącego bajtu (czyli w normalnym intelowskim little-endian).
-    align<x>b:
-        nieużywane pola o takiej długości, aby offset kolejnego pola
-        był wielokrotnością <x>.
     uv:
         unsigned variable length coding: dzieli bloki na 7-bitowe kawałki,
         koduje każdy kawałek jako jeden bajt z najwyższym bitem ustawionym
         dla oznaczenia ostatniego kawałka; kawałki są kodowane od najstarszego
         do najmłodszego.
-    utfz:
+    utf8:
+        napis w utf-8
+    utf8z:
         napis w utf-8 zakończony znakiem \x00 (znak ten nie jest poprawny w
         utf-8, więc można go użyć jako terminatora).
 
 --------------------------------------------------------------------------------
-0. KORPUS
+0. PROCEDURA BUDOWANIA INDEKSU
+
+ - Tokenizacja wikipedii. Dane wejściowe z wikipedii zamienia się na taki
+   format, w którym każdy artykuł jest zapisany w dwóch liniach, gdzie
+   pierwsza linia zawiera tytuł, a druga tekst artykułu. Na tym etapie
+   usuwamy wszystkie zbędne znaki oraz formujemy termy; zarówno w tytule,
+   jak i w tekście termy są oddzielone pojedynczą spacją.
+ 
+ - Tworzenie listy tytułów artykułów. Na podstawie ztokenizowanej wikipedii
+   bardzo łatwo stworzyć pierwszy plik indeksu: tytuły artykułów (TITL).
+
+ - Tworzenie korpusu (CORP). Na podstawie ztokenizowanej wikipedii oraz
+   morfologika tworzymy korpus. Jest to plik oparty na tabeli hashującej,
+   który zawiera wszystkie termy wikipedii oraz  morfologika oraz umożliwia
+   łatwą zamianę ich na liczby. Plik ten daje nam wyobrażenie o zbiorze
+   termów w danych wejściowych oraz gwarantuje, że żadne słowo już nigdy
+   nas nie zaskoczy.
+
+ - Digitizacja. Ztokenizowaną wikipedię zamieniamy na format binarny, to 
+   znaczy zamieniamy kolejne tokeny na trójki (id_tokenu, nr_dokumentu,
+   nr_słowa_w_dokumencie). id_tokenu jest wyznaczane przez korpus.
+
+ - Odwracanie. Zdigitizowana wikipedia jest sortowana leksykograficznie
+   dzięki czemu powstaje (nieco spasiony) pozycyjny indeks odwrócony.
+
+ - Tworzenie indeksów i słownika. Na podstawie poprzedniego kroku łatwo
+   stworzyć plik pozycyjnego indeksu odwróconego (IDXP) oraz
+   słownika (DICT). Z wykorzystaniem morfologika można też już stworzyć 
+   plik indeksu lematyzowanego (IDXL), jakkolwiek chyba nie jest to proste.
+
+ - Przycinanie. Być może wzięcie do korpusu morfologika + wikipedii było
+   nieco na wyrost. Na końcu możemy usunąć ze słownika wszystkie słowa,
+   które mają puste listy postingowe.
+
+ - Szczęśliwy koniec.
+
+... 0a. Lematyzacja
+
+Jasne jest, że spotkawszy słowo w tekście chcemy je utożsamić ze wszystkimi
+jego formami bazowymi (lub, jeśli takowych nie posiada, jedynie z nim samym).
+Jednocześnie w specyfikacji zadania napisano, że "pojawienie się słowa w
+zapytaniu oznacza zapytanie o którąkolwiek z jego form bazowych"! Oznacza to,
+że jeżeli w tekście pojawia się słowo "kotami", to utożsamiamy je ze słowem
+"kot", zaś użytkowik może wpisać "kotach".  Możliwe są dwa podejścia do
+problemu (przynajmniej ;).
+  1. Indekser wykonuje jednokrotnie lematyzację, a wyszukiwarka zamienia
+     term 't' z zapytania na 't1' or 't2' or 't3', gdzie 't1', 't2', 't3'
+     są formami bazowymi termu 't'. W tej wersji wyszukiwarka musi używać
+     morfologika oraz wykonywać istotnie więcej merge-ów niż pojawia się
+     w zapytaniu.
+  2. Indekser wykonuje lematyzację podwójnie, to znaczy gdy widzi term 't',
+     rozpatruje wszystkie jego formy bazowe 't1', 't2', 't3', a dla każdej
+     z nich rozpatruje wszystkie formy pochodne, czyli 't11', 't12', 't13',
+     't21', 't22', 't31', 't32' oraz indeksuje dokument pod wszystkimi tymi
+     adresami. Wtedy wyszukiwarka może sięgnąć po prostu do jednej listy
+     w indeksie.
+Ze względu na optymalizację czasu wyszukiwania korzystniejsze jest podejście
+drugie. Niestety, naiwna implementacja pociąga za sobą potężny rozrost
+indeksu: jeżeli słowo ma dwie formy bazowe i są to dwa rzeczowniki, to
+każdy z tych rzeczowników ma przynajmniej siedem form pochodnych (przypadki),
+czyli jeden dokument zostanie zindeksowany czternaście razy!
+Aby zapobiec takiej sytuacji, można zauważyć, że większość słów ma tylko
+jedną formę podstawową. W szczególności prawie wszystkie odmiany słowa
+"kot", które może wpisać użytkownik, jako jedyną formę podstawową mają
+właśnie słowo "kot". W związku z tym ich listy postingowe będą takie same
+(i będą zawierały wszystkie wystąpienia pochodnych słowa kot w wikipedii).
+W związku z tym, można pamiętać tylko jedną taką listę postingową i 
+podpiąć ją pod wszystkie słowa, które jako jedyną formę podstawową mają
+słowo "kot".
+
+
+::: problem:
+WIKIPEDIA             F. BAZOWE          UŻYTKOWNIK
+
+
+                         .1.
+             ,---------> .2.
+             |           .3.         
+in: 2+4+8 ---+---------> .4. >---.  
+             |           .5.     | 
+             |           .6. >---+----->  wynik: 4+6+9
+             |           .7.     |  
+             `---------> .8.     |     
+                         .9. >---'   
+
+::: optymalizacja:
+WIKIPEDIA             F. BAZOWE          UŻYTKOWNIK
+
+
+                         ....
+               ,-------> kota >--+--------> kota       osobna lista postingowa
+              /          ....    |      --> kotki   \
+kota --------<           ....   /      +--> koty     |
+              \          ....   |     +---> kotu     | wspólna
+               +-------> kot  >-^----+----> kotom    | lista
+              /          ....         +---> kotem    | postingowa
+xxx ---------'           ....          +--> kotów    |
+                         ....           --> kocie   /
+
+... 0a. Plik korpusu:
 
 u32: magiczna liczba ('CORP')
 3*u32: parametry a,b,n, funkcji hashującej (słowo traktujemy jako liczbę
@@ -26,7 +124,12 @@ u8[]: ilości słów w kubełkach
 u8[]: długości kolejnych słów
 utf8[]: słowa
 
-Rozmiar pliku: 50MB dla morfologika
+... 0b. Plik zdigitizowany:
+
+u64[]: ciąg symboli, gdzie każdy symbol składa się z:
+        - 25 bitów: id termu według korpusu (msb)
+        - 20 bitów: id dokumentu
+        - 19 bitów: offset termu w dokumencie (lsb)
 
 --------------------------------------------------------------------------------
 1. TYTUŁY ARTYKUŁÓW
