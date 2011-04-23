@@ -1,11 +1,10 @@
-#include <unistd.h>
-#include <fcntl.h>
 #include <time.h>
 #include <pthread.h>
-#include <sys/mman.h>
 #include <sys/eventfd.h>
 #include <talloc.h>
+
 #include "bufrw.h"
+#include "fileio.h"
 #include "term.h"
 
 /* -------------------------------------------------------------------------- */
@@ -65,19 +64,16 @@ void Artitles::read(const char *filename)
 
     Timer timer; timer.start();
 
-    int fd = open(filename, O_RDONLY);
-    if(fd == -1) {
-        perror("opening article titles file failed: open(2)");
-        abort();
-    }
-
-    FileIO fio(fd);
+    FileIO fio(filename, O_RDONLY);
+    
     off_t size = fio.seek(0, SEEK_END);
-
     char *data = (char *)fio.read_raw_alloc(size, 0);
     talloc_steal(memctx, data);
-    Reader rd(data, size);
 
+    fio.close();
+
+    Reader rd(data, size);
+    
     assert(rd.read_u32() == 0x4c544954);
     int n_articles = rd.read_u32();
 
@@ -88,7 +84,6 @@ void Artitles::read(const char *filename)
         rd.seek_past('\0');
     }
 
-    close(fd);
     info("article titles read in %.03lf seconds.\n", timer.end());
 }
 
@@ -156,26 +151,9 @@ void Dictionary::read(const char *filename)
 
     Timer timer; timer.start();
 
-    int fd = open(filename, O_RDONLY);
-    if(fd == -1) {
-        perror("opening dictionary file failed: open(2)");
-        abort();
-    }
+    FileMapping fmap(filename);
+    do_read(Reader(fmap.data(), fmap.size()));
 
-    off_t size = lseek(fd, 0, SEEK_END);
-    assert(size != (off_t)-1);
-
-    void *data =
-        mmap(NULL, size, PROT_READ, MAP_PRIVATE|MAP_POPULATE, fd, 0);
-    if(data== NULL) {
-        perror("mmmaping dictionary file failed: mmap(2)");
-        abort();
-    }
-
-    do_read(Reader(data, size));
-
-    munmap(data, size);
-    close(fd);
     info("dictionary read in %.03lf seconds\n", timer.end());
 }
 
@@ -365,18 +343,13 @@ PostingsSource::~PostingsSource() {
 
 int PostingsSource::openIndex(const char *filename, uint32_t magic)
 {
-    int fd = open(filename, O_RDONLY);
-    if(fd == -1) {
-        perror("failed to open index file: open(2)");
-        abort();
-    }
-
+    FileIO fio(filename, O_RDONLY);
+    
     uint32_t mg;
-    FileIO fio(fd);
     fio.read_raw(&mg, sizeof(mg));
     assert(mg == magic);
 
-    return fd;
+    return fio.filedes();
 }
 
 void PostingsSource::start(const char *positional_filename, const char *lemmatized_filename)
@@ -567,6 +540,7 @@ QueryNode *QueryParser::run(const char *query)
 {
     memctx = talloc_new(NULL);
     trd.attach(query, strlen(query));
+    trd.setQueryReadingMode();
 
     try {
         return parseQuery();
