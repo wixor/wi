@@ -1,18 +1,26 @@
 #include <talloc.h>
+#include <algorithm> /* for upper_bound */
 #include "bufrw.h"
 #include "term.h"
 
-bool TermReader::isWhitespace(int c)
+bool TermReader::isQuerySymbol(int c) {
+    return c == '|' || c == ')' || c == '(' || c == '"';
+}
+bool TermReader::isWhitespace(int c) const
 {
     static const char stopchars[] =
         " \n\t\r`~!@#$%^&*-_=+\[]{};':,./<>?";
     for(const char *p = stopchars; *p; p++)
         if(c == *p)
             return true;
+    if(!look_for_query_symbols && isQuerySymbol(c))
+        return true;
+    if(c >= 0x2000 && c <= 0x206F) /* unicode: general punctuation */
+        return true;
     return false;
 }
-bool TermReader::isTermSeparator(int c) {
-    return isWhitespace(c) || c == '|' || c == ')' || c == '(' || c == '"';
+bool TermReader::isTermSeparator(int c) const {
+    return isWhitespace(c) || isQuerySymbol(c);
 }
 
 bool TermReader::eatSymbol(int sym)

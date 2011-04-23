@@ -29,17 +29,25 @@
 class TermReader
 {
     Reader rd;
+    bool look_for_query_symbols;
 
-    static inline bool isWhitespace(int c);
-    static inline bool isTermSeparator(int c);
+    static inline bool isQuerySymbol(int c);
+    inline bool isWhitespace(int c) const;
+    inline bool isTermSeparator(int c) const;
 
 public:
+    inline TermReader() { }
+    inline TermReader(const void *buf, size_t len) { attach(buf, len); }
+
     inline void attach(const void *buf, size_t len) {
         rd.attach(buf, len);
     }
     inline off_t seek(ssize_t offs, int whence = SEEK_SET) { return rd.seek(offs, whence); }
     inline size_t tell() const { return rd.tell(); }
     inline bool eof() const { return rd.eof(); }
+
+    inline void setQueryReadingMode() { look_for_query_symbols = true; }
+    inline void setTextReadingMode() { look_for_query_symbols = false; }
 
     inline int read_utf8() { return rd.read_utf8(); }
 
@@ -52,9 +60,10 @@ public:
 struct TermHasher
 {
     int a,b, n;
+    
     int hash(const char *term, size_t len) const;
     inline int buckets() const { return n; }
+    inline int operator()(const char *term, size_t len) const { return hash(term, len); }
 };
-
 
 #endif
