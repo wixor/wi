@@ -1,20 +1,13 @@
 #ifndef __BUFRW_H__
 #define __BUFRW_H__
 
-#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include <unistd.h>
 #include <assert.h>
 #include <endian.h>
-#include <sys/types.h>
+#include <unistd.h> /* for SEEK_* */
 
-#ifndef likely
-#define likely(x) __builtin_expect(!!(x), 1)
-#endif
-#ifndef unlikely
-#define unlikely(x) __builtin_expect(!!(x), 0)
-#endif
+#include "likely.h"
 
 /*
  * Writer: write to auto-growing memory buffer
@@ -181,80 +174,5 @@ public:
             seek(boundary - rem, SEEK_CUR);
     }
 };
-
-/* -------------------------------------------------------------------------- */
-
-class FileIO
-{
-    int fd;
-
-    static void read_error(ssize_t rd, size_t size);
-    static void write_error(ssize_t wr, size_t size);
-
-public:
-    inline FileIO() { }
-    inline FileIO(int fd) { attach(fd); }
-    inline void attach(int fd) { this->fd = fd; }
-
-    inline off_t seek(off_t offs, int whence = SEEK_SET) const
-    {
-        off_t ret = lseek(fd, offs, whence);
-        assert(likely(ret != -1));
-        return ret;
-    }
-    inline off_t size() const
-    {
-        off_t here = tell();
-        off_t ret = lseek(fd, 0, SEEK_END);
-        assert(likely(ret != -1));
-        seek(here);
-        return ret;
-    }
-    inline off_t left() const
-    {
-        off_t here = tell();
-        off_t ret = lseek(fd, 0, SEEK_END);
-        assert(likely(ret != -1));
-        seek(here);
-        return ret-here;
-    }
-    inline off_t tell() const { return seek(0, SEEK_CUR); }
-    inline bool eof() const { return left() == 0; }
-    inline int filedes() const { return fd; }
-
-    inline void read_raw(void *out, size_t size, off_t offs = -1) const
-    {
-        ssize_t rd =
-            offs != -1 ? pread(fd, out, size, offs)
-                       : read(fd, out, size);
-        if(unlikely(rd != (ssize_t)size))
-            read_error(rd, size);
-    }
-
-    inline void *read_raw_alloc(size_t size, off_t offs = -1) const
-    {
-        void *buf = talloc_size(NULL, size);
-        assert(likely(buf));
-        read_raw(buf, size, offs);
-        return buf;
-    }
-
-    inline void write_raw(const void *v, size_t size, off_t offs = -1) const
-    {
-        ssize_t wr =
-            offs != -1 ? pwrite(fd, v, size, offs)
-                       : write(fd, v, size);
-        if(unlikely(wr != (ssize_t)size))
-            write_error(wr, size);
-    }
-
-    inline void align(int boundary) const
-    {
-        int rem = tell() % boundary;
-        if(rem)
-            seek(boundary - rem, SEEK_CUR);
-    }
-};
-
 
 #endif
