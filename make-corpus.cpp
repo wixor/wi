@@ -11,28 +11,23 @@ struct word {
     int hash;
     const char *data;
 
-    inline bool operator<(const word &w) const
+    inline int cmp(const word &w) const
     {
-        if(hash != w.hash)
-            return hash < w.hash;
+        if(likely(hash != w.hash))
+            return hash - w.hash;
         for(int i=0;;i++) {
             if(data[i] != w.data[i])
-                return data[i] < w.data[i];
+                return data[i] - w.data[i];
             if(unlikely(data[i] == ' ' || data[i] == '\n'))
-                return false;
+                return 0;
         }
     }
 
-    inline bool operator==(const word &w) const
-    {
-        if(hash != hash)
-            return false;
-        for(int i=0;;i++) {
-            if(data[i] != w.data[i])
-                return false;
-            if(unlikely(data[i] == ' ' || data[i] == '\n'))
-                return true;
-        }
+    inline bool operator<(const word &w) const {
+        return cmp(w) < 0;
+    }
+    inline bool operator==(const word &w) const {
+        return cmp(w) == 0;
     }
 
     inline int length() const {
@@ -43,7 +38,43 @@ struct word {
 };
 
 static TermHasher th;
-static std::vector<word> words;
+static std::vector<word> words, result;
+static int uniqness_tolerance = 1000000;
+
+static void lost_uniqness()
+{
+    if(--uniqness_tolerance > 0)
+        return;
+    uniqness_tolerance = 1000000;
+
+    printf("sorting\n");
+    std::sort(words.begin(), words.end());
+
+    printf("merging\n");
+    std::vector<word> v;
+    v.reserve(words.size() + result.size());
+
+    int i=0, j=0;
+    while(i < result.size() && j < words.size())
+    {
+        while(j+1 < words.size() && words[j] == words[j+1]) j++;
+
+        int c = result[i].cmp(words[j]);
+
+        v.push_back(c < 0 ? result[i] : words[j]);
+
+        if(c <= 0) i++;
+        if(c >= 0) j++;
+    }
+    while(i < result.size()) v.push_back(result[i++]);
+    while(j < words.size()) {
+        while(j+1 < words.size() && words[j] == words[j+1]) j++;
+        v.push_back(words[j++]);
+    }
+
+    words.clear();
+    std::swap(v, result);
+}
 
 static void add_words(const char *start, const char *end)
 {
@@ -57,6 +88,7 @@ static void add_words(const char *start, const char *end)
             w.hash = th(p, start-p);
             w.data = p;
             words.push_back(w);
+            lost_uniqness();
         }
     }
 }
@@ -78,19 +110,12 @@ int main(int argc, char *argv[])
                   (const char *)maps[i].end());
     }
    
-    {
-      printf("sorting\n");
-      std::sort(words.begin(), words.end());
-      
-      printf("unique-ing\n");
-      std::vector<word> unq(words.size());
-      int n = std::unique_copy(words.begin(), words.end(), unq.begin()) - unq.begin();
-      unq.resize(n);
-      std::swap(unq, words);
-    }
+    uniqness_tolerance = 0;
+    lost_uniqness();
 
-
-    printf("distinct words: %d\n", words.size());
+    printf("distinct words: %d\n", result.size());
+    for(int i=1; i<result.size(); i++)
+        assert(result[i-1] < result[i]);
 
     Writer wr;
 
@@ -103,17 +128,17 @@ int main(int argc, char *argv[])
     printf("writing bucket sizes\n");
     for(int i=0,p=0; i<th.buckets(); i++) {
         int q = p;
-        while(p<words.size() && words[p].hash == i) p++;
+        while(p<result.size() && result[p].hash == i) p++;
         wr.write_u8(p-q);
     }
 
     printf("writing word lengths\n");
-    for(int i=0; i<words.size(); i++)
-        wr.write_u8(words[i].length());
+    for(int i=0; i<result.size(); i++)
+        wr.write_u8(result[i].length());
 
-    printf("writing words\n");
-    for(int i=0; i<words.size(); i++)
-        wr.write_raw(words[i].data, words[i].length());
+    printf("writing result\n");
+    for(int i=0; i<result.size(); i++)
+        wr.write_raw(result[i].data, result[i].length());
 
     printf("flushing\n");
     FileIO fio("corpus", O_WRONLY|O_CREAT|O_TRUNC);
