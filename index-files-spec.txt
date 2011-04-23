@@ -15,6 +15,20 @@ Oznaczenia:
         utf-8, więc można go użyć jako terminatora).
 
 --------------------------------------------------------------------------------
+0. KORPUS
+
+u32: magiczna liczba ('CORP')
+3*u32: parametry a,b,n, funkcji hashującej (słowo traktujemy jako liczbę
+       zapisaną w systemie 256-tkowym od najstarszej do najmłodszej pozycji;
+       hashem słowa x jest wartość ((ax+b) % mod) % n, gdzie mod = 2012345669.
+       ilością kubełków jest n.
+u8[]: ilości słów w kubełkach
+u8[]: długości kolejnych słów
+utf8[]: słowa
+
+Rozmiar pliku: 50MB dla morfologika
+
+--------------------------------------------------------------------------------
 1. TYTUŁY ARTYKUŁÓW
 
 u32: magiczna liczba ('TITL')
@@ -28,10 +42,7 @@ do pamięci (stąd brak prostego dostępu do n-tego dokumentu).
 2. SŁOWNIK
 
 u32: magiczna liczba ('DICT')
-3*u32: parametry a,b,n, funkcji hashującej (słowo traktujemy jako liczbę
-       zapisaną w systemie 256-tkowym od najstarszej do najmłodszej pozycji;
-       hashem słowa x jest wartość ((ax+b) % mod) % n, gdzie mod = 2012345669.
-       ilością kubełków jest n.
+3*u32: parametry a,b,n, funkcji hashującej (jak w korpusie)
 u32: ilość list lematyzowanych
 u8[]: ilość słów w kubełku
 dla każdego kubełka:
@@ -47,7 +58,7 @@ dla każdej listy lematyzowanej:
 dla każdego słowa:
     utf8: słowo
 
-Rozmiar pliku: nie wiadomo, może z 50MB. Struktura zrobiona tak, aby
+Rozmiar pliku: nie wiadomo, może 50MB, może 100MB. Struktura zrobiona tak, aby
 można było wczytać całość do pamięci. Kolejność słów wyznacza kolejność w
 indeksie pozycyjnym (ale nie w lematyzowanym), gdzie każde słowo ma swoją
 własną listę. W indeksie lematyzowanym listy mogą być współdzielone, to znaczy
