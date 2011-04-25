@@ -389,7 +389,8 @@ void PostingsSource::request(ReadRq *rqs, int count, IndexType idxtype)
     info("requesting %d postings read from %s index:\n",
             count, idxtype == LEMMATIZED ? "lemmatized" : "positional");
     for(int i=0; i<count; i++)
-        info("  %zu bytes from 0x%llx\n", rqs[i].info.size, rqs[i].info.offset);
+        info("  %zu bytes from 0x%llx\n",
+             rqs[i].info.size, (unsigned long long)rqs[i].info.offset);
 
     pthread_mutex_lock(&lock);
     fd = idxtype == POSITIONAL ? positional_fd : lemmatized_fd;
@@ -574,7 +575,7 @@ static void resolve_terms(QueryNode *node, IndexType idxtype)
 
         info("term '%s' resolved to id 0x%08x, has %d entries at 0x%llx, size %zu\n",
              node->term_text, node->term_id,
-             node->info.n_entries, node->info.offset, node->info.size);
+             node->info.n_entries, (unsigned long long)node->info.offset, node->info.size);
 
     } else {
         resolve_terms(node->lhs, idxtype);
@@ -747,7 +748,7 @@ void TreePostingsSource::createRqs()
 
         info("term %d: '%s', id 0x%08x, postings at 0x%llx, size %zu\n",
              i, terms[i]->term_text,
-             terms[i]->term_id, terms[i]->info.offset, terms[i]->info.size);
+             terms[i]->term_id, (unsigned long long)terms[i]->info.offset, terms[i]->info.size);
 
         term_rq_map[i] = rqs_count++;
         rqs[term_rq_map[i]].info = terms[i]->info;
