@@ -1,4 +1,6 @@
+extern "C" {
 #include <talloc.h>
+}
 #include "bufrw.h"
 
 void Writer::grow(size_t need)

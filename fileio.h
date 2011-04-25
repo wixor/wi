@@ -5,7 +5,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+extern "C" {
 #include <talloc.h>
+}
 
 #include "likely.h"
 

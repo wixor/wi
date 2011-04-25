@@ -1,7 +1,9 @@
 #include <time.h>
 #include <pthread.h>
 #include <sys/eventfd.h>
+extern "C" {
 #include <talloc.h>
+}
 
 #include "bufrw.h"
 #include "fileio.h"
