@@ -4,6 +4,7 @@
 extern "C" {
 #include <talloc.h>
 }
+#include <algorithm>
 
 #include "bufrw.h"
 #include "fileio.h"
@@ -420,6 +421,7 @@ struct QueryNode
     const char *term_text; /* actual term text */
     Dictionary::Key term_id; /* index of term in dictionary */
 
+    int estim_entries; /* estimate length of posting list */
     Dictionary::PostingListInfo info;
     void *postings; /* actual posting list */
 };
@@ -754,6 +756,141 @@ void TreePostingsSource::createRqs()
 
 /* -------------------------------------------------------------------------- */
 
+class BooleanQueryOptimizer
+{
+    void *memctx;
+    int node_count;
+    QueryNode **scratchpad;
+
+    void count_nodes(const QueryNode *node);
+    static void linearize(QueryNode *node);
+    QueryNode *arrange(QueryNode *node);
+
+    static void fix_parents(QueryNode *node);
+    static void check_parents(const QueryNode *node);
+
+public:
+    QueryNode *run(QueryNode *root);
+};
+
+void BooleanQueryOptimizer::count_nodes(const QueryNode *node)
+{
+    if(!node) return;
+    node_count++;
+    count_nodes(node->lhs);
+    count_nodes(node->rhs);
+}
+
+void BooleanQueryOptimizer::linearize(QueryNode *node)
+{
+    if(!node) return;
+     
+    while(node->lhs && node->lhs->type == node->type &&
+          node->rhs && node->rhs->type == node->type)
+    {
+        QueryNode *p = node->lhs, *q = node->rhs;
+        node->rhs = q->rhs;
+        q->rhs = q->lhs;
+        q->lhs = p;
+        node->lhs = q;
+    }
+
+    if(node->lhs && node->lhs->type != node->type &&
+       node->rhs && node->rhs->type == node->type)
+        std::swap(node->lhs, node->rhs);
+
+    linearize(node->lhs);
+    linearize(node->rhs);
+}
+
+QueryNode *BooleanQueryOptimizer::arrange(QueryNode *node)
+{
+    QueryNode::Type type = node->type;
+    switch(type) {
+        case QueryNode::TERM:
+            node->estim_entries = node->info.n_entries;
+            return node;
+        case QueryNode::AND:
+        case QueryNode::OR:
+            break;
+        default:
+            abort();
+    }
+
+    QueryNode **base = scratchpad, **pool = base;
+
+    for(QueryNode *p = node; p->type == type; p = p->lhs)
+        *scratchpad++ = p;
+    
+    QueryNode **children = scratchpad;
+
+    for(QueryNode **p = pool; p < children; p++)
+        *scratchpad++ = (*p)->rhs;
+    *scratchpad++ = children[-1]->lhs;
+
+    QueryNode **end = scratchpad;
+
+    while(end - children >= 2)
+    {
+        if(end[-1]->estim_entries > end[-2]->estim_entries)
+            std::swap(end[-1], end[-2]);
+
+        for(QueryNode **p = children; p<end-2; p++)
+            if((*p)->estim_entries < end[-1]->estim_entries) {
+                std::swap(end[-1], end[-2]);
+                std::swap(*p, end[-1]);
+            }
+            else if((*p)->estim_entries < end[-2]->estim_entries)
+                std::swap(*p, end[-2]);
+
+        QueryNode *v = *pool++;
+        v->lhs = end[-1];
+        v->rhs = end[-2];
+
+        v->estim_entries =
+            type == QueryNode::OR
+                ? v->lhs->estim_entries + v->rhs->estim_entries
+                : std::min(v->lhs->estim_entries, v->rhs->estim_entries);
+        end[-2] = v;
+        end--;
+    }
+
+    scratchpad = base;
+    return children[0];
+}
+
+void BooleanQueryOptimizer::fix_parents(QueryNode *node)
+{
+    if(!node) return;
+    if(node->lhs) node->lhs->parent = node;
+    if(node->rhs) node->rhs->parent = node;
+    fix_parents(node->lhs);
+    fix_parents(node->rhs);
+}
+
+void BooleanQueryOptimizer::check_parents(const QueryNode *node)
+{
+    if(!node) return;
+    assert(!node->lhs || node->lhs->parent == node);
+    assert(!node->rhs || node->rhs->parent == node);
+    check_parents(node->lhs);
+    check_parents(node->rhs);
+}
+
+QueryNode *BooleanQueryOptimizer::run(QueryNode *root)
+{
+    memctx = talloc_parent(root);
+    node_count = 0; count_nodes(root);
+    scratchpad = talloc_array(memctx, QueryNode *, node_count);
+    assert(scratchpad);
+
+    linearize(root);
+    root = arrange(root);
+    fix_parents(root);
+    check_parents(root);
+    return root;
+}
+
 class BooleanQueryEngine
 {
     void *memctx;
@@ -778,7 +915,7 @@ void BooleanQueryEngine::evaluateAndNode(QueryNode *node)
               *B = (int *)node->rhs->postings, m = node->rhs->info.n_entries, *Bend = B + m;
     int *C = (int *)node->postings;
 
-    node->postings = talloc_array(memctx, int, n < m ? n : m);
+    node->postings = talloc_array(memctx, int, std::min(n,m));
     assert(node->postings);
 
     while(A < Aend && B < Bend)
@@ -850,6 +987,8 @@ void BooleanQueryEngine::run(QueryNode *root)
     memctx = talloc_parent(root);
 
     resolve_terms(root, LEMMATIZED);
+
+    { BooleanQueryOptimizer opt; root = opt.run(root); }
 
     TreePostingsSource tpr;
     tpr.attach(root, LEMMATIZED, memctx);
