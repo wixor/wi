@@ -395,6 +395,9 @@ void PostingsSource::request(ReadRq *rqs, int count, IndexType idxtype)
         info("  %zu bytes from 0x%llx\n",
              rqs[i].info.size, (unsigned long long)rqs[i].info.offset);
 
+    if(!count)
+        return;
+
     pthread_mutex_lock(&lock);
     fd = idxtype == POSITIONAL ? positional_fd : lemmatized_fd;
     this->rqs = rqs;
@@ -814,6 +817,7 @@ void BooleanQueryOptimizer::linearize(QueryNode *node)
 
 QueryNode *BooleanQueryOptimizer::arrange(QueryNode *node)
 {
+    /* check node type */
     QueryNode::Type type = node->type;
     switch(type) {
         case QueryNode::TERM:
@@ -827,21 +831,63 @@ QueryNode *BooleanQueryOptimizer::arrange(QueryNode *node)
             abort();
     }
 
+    /* extract nodes of this group (sharing the functor */
     QueryNode **base = scratchpad, **pool = base;
-
     for(QueryNode *p = node; p->type == type; p = p->lhs)
         *scratchpad++ = p;
-    
-    QueryNode **children = scratchpad;
 
+    /* extract children of this group's nodes */   
+    QueryNode **children = scratchpad;
     for(QueryNode **p = pool; p < children; p++)
         *scratchpad++ = (*p)->rhs = arrange((*p)->rhs);
     *scratchpad++ = children[-1]->lhs = arrange(children[-1]->lhs);
 
     QueryNode **end = scratchpad;
 
+    /* check children for empty nodes
+     * for AND, if one is found, make entire group as an empty
+     * node; for OR just remove them. */
+    if(type == QueryNode::AND) {
+        for(QueryNode **p = children; p<end; p++) 
+            if((*p)->estim_entries == 0) {
+                node->type = QueryNode::TERM;
+                node->info.n_entries = node->estim_entries = 0;
+                node->postings = &empty_posting_list;
+                scratchpad = base;
+                return node;
+            }
+    } else {
+        for(QueryNode **p = children; p<end; ) 
+            if((*p)->estim_entries == 0)
+                *p = *--end;
+            else
+                p++;
+    }
+
+    /* remove duplicate terms */
+    for(QueryNode **p = children; p<end; )
+    {
+        if((*p)->type != QueryNode::TERM)
+            { p++; continue; }
+
+        bool dupli = false;
+        for(QueryNode **q = children; q<p; q++)
+            if((*q)->type == (*p)->type && (*q)->term_id == (*p)->term_id) {
+                dupli = true;
+                break;
+            }
+
+        if(dupli)
+            *p = *--end;
+        else
+            p++;
+    }
+
+    /* find optimal execution order */
     while(end - children >= 2)
     {
+        /* end[-1] is to be the child with smallest estim_entries and
+           end[-2] is to be the child with second-smalest estim_entries */
         if(end[-1]->estim_entries > end[-2]->estim_entries)
             std::swap(end[-1], end[-2]);
 
@@ -853,6 +899,8 @@ QueryNode *BooleanQueryOptimizer::arrange(QueryNode *node)
             else if((*p)->estim_entries < end[-2]->estim_entries)
                 std::swap(*p, end[-2]);
 
+        /* set up the new node (reusing one of the old ones)
+           the deeper sub-tree always goes to the lhs. */
         QueryNode *v = *pool++;
         v->lhs = end[-1];
         v->rhs = end[-2];
@@ -866,6 +914,7 @@ QueryNode *BooleanQueryOptimizer::arrange(QueryNode *node)
                 ? v->lhs->estim_entries + v->rhs->estim_entries
                 : std::min(v->lhs->estim_entries, v->rhs->estim_entries);
 
+        /* insert the new node in place of the old ones */
         end[-2] = v;
         end--;
     }
@@ -1001,7 +1050,7 @@ void BooleanQueryEngine::run(QueryNode *root)
 
     dump_query_tree(root);
 
-    { BooleanQueryOptimizer opt; root = opt.run(root); }
+    { BooleanQueryOptimizer opt; info("optimizing query\n"); root = opt.run(root); }
 
     dump_query_tree(root);
 
