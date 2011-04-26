@@ -19,6 +19,9 @@ public:
     int lookup(const char *text, size_t len) const;
     void lookup(int idx, char *out, size_t len) const;
     inline int size() const { return bucket_offsets[th.buckets()]; }
+    inline int buckets() const { return th.buckets(); }
+    inline int bucket_size(int x) const { return bucket_offsets[x+1] - bucket_offsets[x]; }
+    inline TermHasher hasher() const { return th; }
 };
 
 #endif
