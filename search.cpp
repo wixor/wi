@@ -12,7 +12,8 @@ extern "C" {
 
 /* -------------------------------------------------------------------------- */
 
-#define info(fmt, ...) printf(fmt, ## __VA_ARGS__)
+//#define info(fmt, ...) printf(fmt, ## __VA_ARGS__)
+#define info(fmt, ...)
 struct QueryNode;
 static void dump_query_tree(const QueryNode *node, int indent = 0);
 
@@ -294,9 +295,8 @@ private:
     int lemmatized_fd, positional_fd;
 
     pthread_t thread;
-    pthread_mutex_t lock;
     ReadRq *rqs;
-    int rqs_count, fd;
+    int rqs_count, fd, rqs_left;
 
     static int openIndex(const char *filename, uint32_t magic);
     static void* runThreadFunc(void *);
@@ -325,8 +325,6 @@ void PostingsSource::threadFunc()
         uint64_t foo;
         eventfd_read(evfd_rq, &foo);
 
-        pthread_mutex_lock(&lock);
-
         FileIO fio(fd);
         for(int i=0; i<rqs_count; i++)
         {
@@ -338,8 +336,6 @@ void PostingsSource::threadFunc()
             eventfd_write(evfd_done, 1);
         }
         fd = -1;
-
-        pthread_mutex_unlock(&lock);
     }
 }
 
@@ -376,8 +372,8 @@ void PostingsSource::start(const char *positional_filename, const char *lemmatiz
     positional_fd = openIndex(positional_filename, 0x50584449);
     lemmatized_fd = openIndex(lemmatized_filename, 0x4c584449);
     fd = -1;
+    rqs_left = 0;
 
-    pthread_mutex_init(&lock, NULL);
     assert(pthread_create(&thread, NULL, &runThreadFunc, this) == 0);
 
     info("postings source running\n");
@@ -387,7 +383,6 @@ void PostingsSource::stop()
 {
     pthread_cancel(thread);
     pthread_join(thread, NULL);
-    pthread_mutex_destroy(&lock);
     close(evfd_rq);
     close(evfd_done);
     talloc_free(memctx);
@@ -404,21 +399,21 @@ void PostingsSource::request(ReadRq *rqs, int count, IndexType idxtype)
     if(!count)
         return;
 
-    pthread_mutex_lock(&lock);
     fd = idxtype == POSITIONAL ? positional_fd : lemmatized_fd;
     this->rqs = rqs;
-    rqs_count = count;
+    rqs_count = rqs_left = count;
+
     eventfd_write(evfd_rq, 1);
-    pthread_mutex_unlock(&lock);
 }
 
 int PostingsSource::wait(void)
 {
-    if(fd == -1)
+    if(!rqs_left)
         return 0;
 
     uint64_t val;
     eventfd_read(evfd_done, &val);
+    rqs_left -= val;
     info("read %d posting lists\n", (int)val);
     return val;
 }
