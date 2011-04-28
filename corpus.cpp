@@ -1,6 +1,7 @@
 #include <assert.h>
-#include <talloc.h>
-
+extern "C" {
+	#include <talloc.h>
+}
 #include "bufrw.h"
 #include "fileio.h"
 #include "corpus.h"
