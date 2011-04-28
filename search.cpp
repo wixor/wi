@@ -1,7 +1,10 @@
 #include <time.h>
 #include <pthread.h>
 #include <sys/eventfd.h>
+extern "C" {
 #include <talloc.h>
+}
+#include <algorithm>
 
 #include "bufrw.h"
 #include "fileio.h"
@@ -9,7 +12,10 @@
 
 /* -------------------------------------------------------------------------- */
 
-#define info(fmt, ...) printf(fmt, ## __VA_ARGS__)
+//#define info(fmt, ...) printf(fmt, ## __VA_ARGS__)
+#define info(fmt, ...)
+struct QueryNode;
+static void dump_query_tree(const QueryNode *node, int indent = 0);
 
 /* -------------------------------------------------------------------------- */
 
@@ -87,19 +93,19 @@ void Artitles::read(const char *filename)
     info("article titles read in %.03lf seconds.\n", timer.end());
 }
 
+static Artitles artitles; /* GLOBAL */
+
 /* -------------------------------------------------------------------------- */
 
 enum IndexType {
     POSITIONAL, LEMMATIZED
 };
 
-/* -------------------------------------------------------------------------- */
-
 class Dictionary
 {
     struct PostingList {
         off_t offset;
-        int n_entries;
+        int n_postings;
     };
 
     struct Term {
@@ -120,7 +126,7 @@ public:
     struct PostingListInfo {
         off_t offset;
         size_t size;
-        int n_entries;
+        int n_postings;
     };
 
     typedef int Key;
@@ -202,17 +208,17 @@ void Dictionary::do_read(Reader rd)
     }
 
     /* read positional list info */
-    positional[0].offset = 0;
+    positional[0].offset = 4;/* because of index file magic number */
     for(int i=1; i<=term_count; i++) {
         positional[i].offset = positional[i-1].offset + rd.read_uv();;
-        positional[i-1].n_entries = rd.read_uv();
+        positional[i-1].n_postings = rd.read_uv();
     }
 
     /* read lemmatized list info */
-    lemmatized[0].offset = 0;
+    lemmatized[0].offset = 4; /* because of index file magic number */
     for(int i=1; i<=lemmatized_list_count; i++) {
         lemmatized[i].offset = lemmatized[i-1].offset + rd.read_uv();;
-        lemmatized[i-1].n_entries = rd.read_uv();
+        lemmatized[i-1].n_postings = rd.read_uv();
     }
 
     /* compute total texts length */
@@ -265,10 +271,13 @@ Dictionary::PostingListInfo Dictionary::getPostingListInfo(Key key) const
     PostingListInfo ret;
     ret.offset = lists[k].offset;
     ret.size = lists[k+1].offset - lists[k].offset;
-    ret.n_entries = lists[k].n_entries;
+    ret.n_postings = lists[k].n_postings;
 
     return ret;
 }
+
+static Dictionary dictionary; /* GLOBAL */
+static long empty_posting_list; /* GLOBAL */
 
 /* -------------------------------------------------------------------------- */
 
@@ -276,19 +285,18 @@ class PostingsSource
 {
 public:
     struct ReadRq {
-        Dictionary::PostingListInfo info;
+        Dictionary::Key term_id;
         void *data;
     };
 
 private:
     void *memctx;
-    int evfd;
+    int evfd_rq, evfd_done;
     int lemmatized_fd, positional_fd;
 
     pthread_t thread;
-    pthread_mutex_t lock;
     ReadRq *rqs;
-    int rqs_count, fd;
+    int rqs_count, fd, rqs_left;
 
     static int openIndex(const char *filename, uint32_t magic);
     static void* runThreadFunc(void *);
@@ -315,22 +323,19 @@ void PostingsSource::threadFunc()
     for(;;)
     {
         uint64_t foo;
-        eventfd_read(evfd, &foo);
-
-        pthread_mutex_lock(&lock);
+        eventfd_read(evfd_rq, &foo);
 
         FileIO fio(fd);
         for(int i=0; i<rqs_count; i++)
         {
-            rqs[i].data = fio.read_raw_alloc(rqs[i].info.size, rqs[i].info.offset);
+            Dictionary::PostingListInfo info =
+                dictionary.getPostingListInfo(rqs[i].term_id);
+            rqs[i].data = fio.read_raw_alloc(info.size, info.offset);
             talloc_steal(memctx, rqs[i].data);
 
-            eventfd_write(evfd, 1);
-            info("finished postings request %d\n", i);
+            eventfd_write(evfd_done, 1);
         }
         fd = -1;
-
-        pthread_mutex_unlock(&lock);
     }
 }
 
@@ -360,14 +365,15 @@ void PostingsSource::start(const char *positional_filename, const char *lemmatiz
     
     info("starting postings source...\n");
 
-    evfd = eventfd(0, 0);
-    assert(evfd != -1);
+    evfd_rq = eventfd(0, 0);
+    evfd_done = eventfd(0, 0);
+    assert(evfd_rq != -1 && evfd_done != -1);
 
     positional_fd = openIndex(positional_filename, 0x50584449);
     lemmatized_fd = openIndex(lemmatized_filename, 0x4c584449);
     fd = -1;
+    rqs_left = 0;
 
-    pthread_mutex_init(&lock, NULL);
     assert(pthread_create(&thread, NULL, &runThreadFunc, this) == 0);
 
     info("postings source running\n");
@@ -377,34 +383,69 @@ void PostingsSource::stop()
 {
     pthread_cancel(thread);
     pthread_join(thread, NULL);
-    pthread_mutex_destroy(&lock);
+    close(evfd_rq);
+    close(evfd_done);
     talloc_free(memctx);
 }
 
 void PostingsSource::request(ReadRq *rqs, int count, IndexType idxtype)
 {
-    info("requesting %d postings read from %s index:\n",
+    info("requesting %d posting lists from %s index for terms:",
             count, idxtype == LEMMATIZED ? "lemmatized" : "positional");
     for(int i=0; i<count; i++)
-        info("  %zu bytes from 0x%llx\n", rqs[i].info.size, rqs[i].info.offset);
+        info(" 0x%08x", rqs[i].term_id);
+    info("\n");
 
-    pthread_mutex_lock(&lock);
+    if(!count)
+        return;
+
     fd = idxtype == POSITIONAL ? positional_fd : lemmatized_fd;
     this->rqs = rqs;
-    rqs_count = count;
-    eventfd_write(evfd, 1);
-    pthread_mutex_unlock(&lock);
+    rqs_count = rqs_left = count;
+
+    eventfd_write(evfd_rq, 1);
 }
 
 int PostingsSource::wait(void)
 {
-    if(fd == -1)
+    if(!rqs_left)
         return 0;
 
     uint64_t val;
-    eventfd_read(evfd, &val);
-    info("%d postings read\n", (int)val);
+    eventfd_read(evfd_done, &val);
+    rqs_left -= val;
+    info("read %d posting lists\n", (int)val);
     return val;
+}
+
+static PostingsSource posrc; /* GLOBAL */
+
+/* -------------------------------------------------------------------------- */
+
+class PostingsDecoder
+{
+public:
+    static inline void *decode_lemmatized(Reader rd, int count);
+    static inline void *decode_positional(Reader rd, int count);
+};
+
+void* PostingsDecoder::decode_lemmatized(Reader rd, int count)
+{
+    assert(count > 0);
+    int *ret = talloc_array(NULL, int, count);
+
+    ret[0] = rd.read_u24();
+    for(int i=1; i<count; i++)
+        ret[i] = ret[i-1] + rd.read_uv();
+
+    return ret;
+}
+
+
+void* PostingsDecoder::decode_positional(Reader rd, int count)
+{
+    /* TODO */
+    abort();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -418,17 +459,12 @@ struct QueryNode
     const char *term_text; /* actual term text */
     Dictionary::Key term_id; /* index of term in dictionary */
 
-    Dictionary::PostingListInfo info;
+    int estim_postings; /* estimate number of entries in posting list */
+    int depth; /* depth of sub-tree */
+
+    int n_postings; /* number of entries in posting list */
     void *postings; /* actual posting list */
 };
-
-/* -------------------------------------------------------------------------- */
-
-/* GLOBALS */
-static Artitles artitles;
-static Dictionary dictionary;
-static PostingsSource posrdr;
-static long empty_posting_list = -42L;
 
 /* -------------------------------------------------------------------------- */
 
@@ -445,8 +481,10 @@ class QueryParser
     QueryNode *parsePhrase(); /* "query" */
     QueryNode *parseQuery();
 
+    QueryNode *do_run(const char *query);
+
 public:
-    QueryNode *run(const char *query);
+    static inline QueryNode *run(const char *query);
 };
 
 QueryNode *QueryParser::makeNode(QueryNode::Type type, QueryNode *lhs, QueryNode *rhs, const char *term) const
@@ -536,7 +574,7 @@ QueryNode *QueryParser::parseQuery()
     throw "garbage at end";
 }
 
-QueryNode *QueryParser::run(const char *query)
+QueryNode *QueryParser::do_run(const char *query)
 {
     memctx = talloc_new(NULL);
     trd.attach(query, strlen(query));
@@ -552,6 +590,11 @@ QueryNode *QueryParser::run(const char *query)
     return NULL;
 }
 
+QueryNode *QueryParser::run(const char *query) {
+    QueryParser qp;
+    return qp.do_run(query);
+}
+
 /* -------------------------------------------------------------------------- */
 
 static void resolve_terms(QueryNode *node, IndexType idxtype)
@@ -562,16 +605,17 @@ static void resolve_terms(QueryNode *node, IndexType idxtype)
         node->term_id =
             dictionary.lookup(node->term_text, strlen(node->term_text), idxtype);
 
-        if(node->term_id != -1)
-            node->info = dictionary.getPostingListInfo(node->term_id);
+        if(node->term_id != -1) {
+            Dictionary::PostingListInfo info = 
+                dictionary.getPostingListInfo(node->term_id);
+            node->n_postings = info.n_postings;
 
-        if(node->info.n_entries == 0)
+            info("resolved term »%s« (0x%08x): has %d postings, list at 0x%08llx, size %zu\n",
+                  node->term_text, node->term_id, node->n_postings, (unsigned long long)info.offset, info.size);
+        }
+
+        if(node->n_postings == 0)
             node->postings = &empty_posting_list;
-
-        info("term '%s' resolved to id 0x%08x, has %d entries at 0x%llx, size %zu\n",
-             node->term_text, node->term_id,
-             node->info.n_entries, node->info.offset, node->info.size);
-
     } else {
         resolve_terms(node->lhs, idxtype);
         resolve_terms(node->rhs, idxtype);
@@ -580,204 +624,275 @@ static void resolve_terms(QueryNode *node, IndexType idxtype)
 
 /* -------------------------------------------------------------------------- */
 
-class PostingsDecoder
+class BooleanQueryOptimizer
 {
-    static inline void *decode_lemmatized(Reader rd, int count);
-    static inline void *decode_positional(Reader rd, int count);
-public:
-    static inline void *decode(Reader rd, int count, IndexType idxtype);
-};
+    QueryNode **scratchpad;
 
-void* PostingsDecoder::decode_lemmatized(Reader rd, int count)
-{
-    assert(count > 0);
-    int *ret = talloc_array(NULL, int, count);
+    static int count_nodes(const QueryNode *node);
+    static void linearize(QueryNode *node);
+    QueryNode *arrange(QueryNode *node);
 
-    ret[0] = rd.read_u24();
-    for(int i=1; i<count; i++)
-        ret[i] = ret[i-1] + rd.read_uv();
+    static void fix_parents(QueryNode *node);
+    static void check_parents(const QueryNode *node);
 
-    return ret;
-}
-
-
-void* PostingsDecoder::decode_positional(Reader rd, int count)
-{
-    /* TODO */
-    abort();
-}
-
-void *PostingsDecoder::decode(Reader rd, int count, IndexType idxtype)
-{
-    switch(idxtype) {
-        case LEMMATIZED: return decode_lemmatized(rd, count);
-        case POSITIONAL: return decode_positional(rd, count);
-    }
-    abort();
-}
-
-/* -------------------------------------------------------------------------- */
-
-class TreePostingsSource
-{
-    void *memctx;
-
-    IndexType idxtype;
-
-    int term_count, done_wridx, done_rdidx;
-    QueryNode **terms, **done;
-
-    int rqs_count, rqs_rdidx;
-    PostingsSource::ReadRq *rqs;
-    int *term_rq_map;
-
-    static int countLeaves(QueryNode *node);
-    static int extractLeaves(QueryNode *node, QueryNode **ptr);
-    void markFilledTermsAsDone();
-    void createRqs();
+    QueryNode *do_run(QueryNode *root);
 
 public:
-    void attach(QueryNode *root, IndexType idxtype, void *memctx);
-    QueryNode *wait();
+    static inline QueryNode *run(QueryNode *root);
 };
 
-void TreePostingsSource::attach(QueryNode *root, IndexType idxtype, void *memctx)
+int BooleanQueryOptimizer::count_nodes(const QueryNode *node)
 {
-    this->idxtype = idxtype;
-    this->memctx = memctx;
-
-    done_rdidx = done_wridx = rqs_count = rqs_rdidx = 0;
-    term_count = countLeaves(root);
-    terms = talloc_array(memctx, QueryNode*, term_count);
-    done = talloc_array(memctx, QueryNode*, term_count);
-    assert(terms && done);
-
-    extractLeaves(root, terms);
-    markFilledTermsAsDone();
-    createRqs();
-    posrdr.request(rqs, rqs_count, idxtype);
+    return !node ? 0 : 1 + count_nodes(node->lhs) + count_nodes(node->rhs);
 }
 
-QueryNode *TreePostingsSource::wait()
+void BooleanQueryOptimizer::linearize(QueryNode *node)
 {
-    if(done_rdidx < done_wridx)
-        return done[done_rdidx++];
-
-    int n = posrdr.wait();
-    if(n == 0)
-        return NULL;
-
-    while(n--)
+    if(!node) return;
+     
+    while(node->lhs && node->lhs->type == node->type &&
+          node->rhs && node->rhs->type == node->type)
     {
-        PostingsSource::ReadRq *rq = &rqs[rqs_rdidx];
-        talloc_steal(memctx, rq->data);
+        QueryNode *p = node->lhs, *q = node->rhs;
+        node->rhs = q->rhs;
+        q->rhs = q->lhs;
+        q->lhs = p;
+        node->lhs = q;
+    }
 
-        void *decoded = PostingsDecoder::decode(
-            Reader(rq->data, rq->info.size), rq->info.n_entries, idxtype);
-        talloc_steal(memctx, decoded);
+    if(node->lhs && node->lhs->type != node->type &&
+       node->rhs && node->rhs->type == node->type)
+        std::swap(node->lhs, node->rhs);
 
-        for(int i=0; i<term_count; i++)
-            if(term_rq_map[i] == rqs_rdidx) {
-                info("term %d ('%s', id 0x%08x) got data\n",
-                        i, terms[i]->term_text, terms[i]->term_id);
-                terms[i]->postings = decoded;
-                done[done_wridx++] = terms[i];
+    linearize(node->lhs);
+    linearize(node->rhs);
+}
+
+QueryNode *BooleanQueryOptimizer::arrange(QueryNode *node)
+{
+    /* check node type */
+    QueryNode::Type type = node->type;
+    if(type == QueryNode::TERM) {
+        node->estim_postings = node->n_postings;
+        return node;
+    }
+
+    /* extract nodes of this group (sharing the functor */
+    QueryNode **base = scratchpad, **pool = base;
+    for(QueryNode *p = node; p->type == type; p = p->lhs)
+        *scratchpad++ = p;
+
+    /* extract children of this group's nodes */   
+    QueryNode **children = scratchpad;
+    for(QueryNode **p = pool; p < children; p++)
+        *scratchpad++ = (*p)->rhs = arrange((*p)->rhs);
+    *scratchpad++ = children[-1]->lhs = arrange(children[-1]->lhs);
+
+    QueryNode **end = scratchpad;
+
+    info("node %p: root of group type %s, size: %d, children: %d\n",
+         node, type == QueryNode::AND ? "AND" : "OR",
+         (int)(children-base), (int)(end - children));
+
+    /* check children for empty nodes
+     * for AND, if one is found, make entire group as an empty
+     * node; for OR just remove them. */
+    if(type == QueryNode::AND) {
+        for(QueryNode **p = children; p<end; p++) 
+            if((*p)->estim_postings == 0) {
+                info("found empty node %p in AND group, emptying whole group\n", (*p));
+                node->type = QueryNode::TERM;
+                node->n_postings = node->estim_postings = 0;
+                node->postings = &empty_posting_list;
+                scratchpad = base;
+                return node;
             }
-
-        rqs_rdidx++;
+    } else {
+        for(QueryNode **p = children; p<end; ) 
+            if((*p)->estim_postings == 0) {
+                info("found empty node %p in OR group, removing\n", (*p));
+                *p = *--end;
+            } else
+                p++;
     }
 
-    assert(done_rdidx < done_wridx);
-    return done[done_rdidx++];
-}
-
-int TreePostingsSource::countLeaves(QueryNode *node)
-{
-    if(!node) return 0;
-    if(node->type == QueryNode::TERM)
-        return 1;
-    return countLeaves(node->lhs) + countLeaves(node->rhs);
-}
-int TreePostingsSource::extractLeaves(QueryNode *node, QueryNode **ptr)
-{
-    if(!node) return 0;
-    if(node->type == QueryNode::TERM) {
-        *ptr = node;
-        return 1;
-    }
-    int l = extractLeaves(node->lhs, ptr);
-    int r = extractLeaves(node->rhs, ptr+l);
-    return l+r;
-}
-void TreePostingsSource::markFilledTermsAsDone()
-{
-    int filled = 0;
-    for(int i=0,j=0; i<term_count; i++)
+    /* remove duplicate terms */
+    for(QueryNode **p = children; p<end; )
     {
-        if(terms[i]->postings) {
-            done[done_wridx++] = terms[i];
-            filled++;
-            info("removing term '%s' (0x%08x), no postings\n",
-                  terms[i]->term_text, terms[i]->term_id);
-        } else
-            terms[j++] = terms[i];
-    }
-    term_count -= filled;
-}
-void TreePostingsSource::createRqs()
-{
-    rqs = talloc_array(memctx, PostingsSource::ReadRq, term_count);
-    assert(rqs);
+        if((*p)->type != QueryNode::TERM)
+            { p++; continue; }
 
-    for(int i=0; i<term_count; i++)
-    {
         bool dupli = false;
-        for(int j=0; j<i; j++)
-            if(terms[j]->term_id == terms[i]->term_id) {
-                term_rq_map[i] = term_rq_map[j];
-                info("term %d: duplicate of term %d\n", i, j);
+        for(QueryNode **q = children; q<p; q++)
+            if((*q)->type == (*p)->type && (*q)->term_id == (*p)->term_id) {
+                info("node %p is duplicate of node %p, removing\n", (*p), (*q));
                 dupli = true;
                 break;
             }
-        if(dupli) continue;
 
-        info("term %d: '%s', id 0x%08x, postings at 0x%llx, size %zu\n",
-             i, terms[i]->term_text,
-             terms[i]->term_id, terms[i]->info.offset, terms[i]->info.size);
-
-        term_rq_map[i] = rqs_count++;
-        rqs[term_rq_map[i]].info = terms[i]->info;
+        if(dupli)
+            *p = *--end;
+        else
+            p++;
     }
+
+    /* find optimal execution order */
+    while(end - children >= 2)
+    {
+        /* end[-1] is to be the child with smallest estim_postings and
+           end[-2] is to be the child with second-smalest estim_postings */
+        if(end[-1]->estim_postings > end[-2]->estim_postings)
+            std::swap(end[-1], end[-2]);
+
+        for(QueryNode **p = children; p<end-2; p++)
+            if((*p)->estim_postings < end[-1]->estim_postings) {
+                std::swap(end[-1], end[-2]);
+                std::swap(*p, end[-1]);
+            }
+            else if((*p)->estim_postings < end[-2]->estim_postings)
+                std::swap(*p, end[-2]);
+
+        /* set up the new node (reusing one of the old ones)
+           the deeper sub-tree always goes to the lhs. */
+        QueryNode *v = *pool++;
+        v->lhs = end[-1];
+        v->rhs = end[-2];
+        
+        if(v->lhs->depth < v->rhs->depth)
+            std::swap(v->lhs, v->rhs);
+        v->depth = v->lhs->depth + 1;
+
+        v->estim_postings =
+            type == QueryNode::OR
+                ? v->lhs->estim_postings + v->rhs->estim_postings
+                : std::min(v->lhs->estim_postings, v->rhs->estim_postings);
+
+        /* insert the new node in place of the old ones */
+        end[-2] = v;
+        end--;
+    }
+
+    scratchpad = base;
+    return children[0];
 }
 
-/* -------------------------------------------------------------------------- */
+void BooleanQueryOptimizer::fix_parents(QueryNode *node)
+{
+    if(!node) return;
+    if(node->lhs) node->lhs->parent = node;
+    if(node->rhs) node->rhs->parent = node;
+    fix_parents(node->lhs);
+    fix_parents(node->rhs);
+}
+
+void BooleanQueryOptimizer::check_parents(const QueryNode *node)
+{
+    if(!node) return;
+    assert(!node->lhs || node->lhs->parent == node);
+    assert(!node->rhs || node->rhs->parent == node);
+    check_parents(node->lhs);
+    check_parents(node->rhs);
+}
+
+QueryNode *BooleanQueryOptimizer::do_run(QueryNode *root)
+{
+    QueryNode *canary = (QueryNode *)0xbadc0de1l;
+
+    int node_count = count_nodes(root);
+    QueryNode *_scratchpad[node_count+1];
+    
+    scratchpad = _scratchpad;
+    _scratchpad[node_count] = canary;
+    
+    linearize(root);
+    root = arrange(root);
+    fix_parents(root);
+    check_parents(root);
+
+    assert(scratchpad == _scratchpad &&
+           _scratchpad[node_count] == canary);
+
+    return root;
+}
+
+QueryNode *BooleanQueryOptimizer::run(QueryNode *root) {
+    BooleanQueryOptimizer opt;
+    return opt.do_run(root);
+}
+
+
 
 class BooleanQueryEngine
 {
     void *memctx;
 
+    static int countTerms(const QueryNode *node);
+    static int extractTerms(QueryNode *node, QueryNode **ptr);
+
     void evaluateAndNode(QueryNode *node) __attribute__((hot));
     void evaluateOrNode(QueryNode *node) __attribute__((hot));
     inline void evaluateNode(QueryNode *node);
 
+    void do_run(QueryNode *root);
+
 public:
-    void run(QueryNode *root);
+    static inline void run(QueryNode *root);
 };
+
+int BooleanQueryEngine::countTerms(const QueryNode *node)
+{
+    return !node ? 0 :
+           node->type == QueryNode::TERM ? 1 :
+           countTerms(node->lhs) + countTerms(node->rhs);
+}
+
+int BooleanQueryEngine::extractTerms(QueryNode *node, QueryNode **ptr)
+{
+    if(!node)
+        return 0;
+    if(node->type == QueryNode::TERM) {
+        *ptr = node;
+        return 1;
+    }
+    int l = extractTerms(node->lhs, ptr);
+    int r = extractTerms(node->rhs, ptr+l);
+    return l+r;
+}
+
+void BooleanQueryEngine::evaluateNode(QueryNode *node)
+{
+    if(!node || node->postings ||
+       !node->lhs->postings || !node->rhs->postings)
+        return;
+
+    info("evaluating node %p: ", node);
+
+    if(node->type == QueryNode::AND)
+        evaluateAndNode(node);
+    else if(node->type == QueryNode::OR)
+        evaluateOrNode(node);
+    else
+        abort();
+
+    info("got %d postings\n", node->n_postings);
+
+    evaluateNode(node->parent);
+}
 
 void BooleanQueryEngine::evaluateAndNode(QueryNode *node)
 {
-    if(node->lhs->info.n_entries == 0 ||
-       node->rhs->info.n_entries == 0) {
+    if(node->lhs->n_postings == 0 ||
+       node->rhs->n_postings == 0) {
         node->postings = &empty_posting_list;
         return;
     }
 
-    const int *A = (int *)node->lhs->postings, n = node->lhs->info.n_entries, *Aend = A + n,
-              *B = (int *)node->rhs->postings, m = node->rhs->info.n_entries, *Bend = B + m;
-    int *C = (int *)node->postings;
+    const int *A = (int *)node->lhs->postings, n = node->lhs->n_postings, *Aend = A + n,
+              *B = (int *)node->rhs->postings, m = node->rhs->n_postings, *Bend = B + m;
 
-    node->postings = talloc_array(memctx, int, n < m ? n : m);
-    assert(node->postings);
+    int *C = talloc_array(memctx, int, std::min(n,m));
+    node->postings = C;
+    assert(C);
 
     while(A < Aend && B < Bend)
         if(*A < *B)
@@ -786,33 +901,29 @@ void BooleanQueryEngine::evaluateAndNode(QueryNode *node)
             B++;
         else 
             *C++ = *A, A++, B++;
-    if(A != Aend)
-        memcpy(C, A, (Aend - A) * sizeof(int));
-    if(B != Bend)
-        memcpy(C, B, (Bend - B) * sizeof(int));
 
-    node->info.n_entries = (C - (int *)node->postings) + (Aend - A) + (Bend - B);
+    node->n_postings = (C - (int *)node->postings);
 }
 
 void BooleanQueryEngine::evaluateOrNode(QueryNode *node)
 {
-    if(node->lhs->info.n_entries == 0) {
+    if(node->lhs->n_postings == 0) {
         node->postings = node->rhs->postings;
-        node->info.n_entries = node->rhs->info.n_entries;
+        node->n_postings = node->rhs->n_postings;
         return;
     }
-    if(node->rhs->info.n_entries == 0) {
+    if(node->rhs->n_postings == 0) {
         node->postings = node->lhs->postings;
-        node->info.n_entries = node->lhs->info.n_entries;
+        node->n_postings = node->lhs->n_postings;
         return;
     }
 
-    const int *A = (int *)node->lhs->postings, n = node->lhs->info.n_entries, *Aend = A + n,
-              *B = (int *)node->rhs->postings, m = node->rhs->info.n_entries, *Bend = B + m;
-    int *C = (int *)node->postings;
+    const int *A = (int *)node->lhs->postings, n = node->lhs->n_postings, *Aend = A + n,
+              *B = (int *)node->rhs->postings, m = node->rhs->n_postings, *Bend = B + m;
 
-    node->postings = talloc_array(memctx, int, n + m);
-    assert(node->postings);
+    int *C = talloc_array(memctx, int, n+m);
+    node->postings = C;
+    assert(C);
 
     while(A < Aend && B < Bend)
         if(*A < *B)
@@ -826,48 +937,74 @@ void BooleanQueryEngine::evaluateOrNode(QueryNode *node)
     if(B != Bend)
         memcpy(C, B, (Bend - B) * sizeof(int));
 
-    node->info.n_entries = (C - (int *)node->postings) + (Aend - A) + (Bend - B);
+    node->n_postings = (C - (int *)node->postings) + (Aend - A) + (Bend - B);
 }
 
-void BooleanQueryEngine::evaluateNode(QueryNode *node)
-{
-    info("evaluating node %p\n", node);
-
-    if(node->type == QueryNode::AND)
-        evaluateAndNode(node);
-    else if(node->type == QueryNode::OR)
-        evaluateOrNode(node);
-    else
-        abort();
-
-    info("result is %d postings\n", node->info.n_entries);
-}
-
-void BooleanQueryEngine::run(QueryNode *root)
+void BooleanQueryEngine::do_run(QueryNode *root)
 {
     memctx = talloc_parent(root);
 
     resolve_terms(root, LEMMATIZED);
+    info("raw query:\n"); dump_query_tree(root);
+    root = BooleanQueryOptimizer::run(root);
+    info("optimized query:\n"); dump_query_tree(root);
 
-    TreePostingsSource tpr;
-    tpr.attach(root, LEMMATIZED, memctx);
+    int term_count = countTerms(root);
+    QueryNode *terms[term_count];
+    extractTerms(root, terms);
 
-    while(QueryNode *node = tpr.wait())
+    int rqs_count = 0, rqs_done = 0;
+    PostingsSource::ReadRq rqs[term_count];
+    for(int i=0; i<term_count; i++)
     {
-        info("node %p (term '%s', id 0x%08x) ready to go\n",
-              node, node->term_text, node->term_id);
+        if(terms[i]->postings)
+            continue;
 
-        node = node->parent;
-        while(node && node->lhs->postings && node->rhs->postings) {
-            evaluateNode(node);
-            node = node->parent;
-        }
+        bool dupli = false;
+        for(int j=0; j<i; j++)
+            if(terms[j]->term_id == terms[i]->term_id) {
+                info("term %d is duplicate of term %d\n", i,j);
+                dupli = true;
+                break;
+            }
+        if(dupli) continue;
+
+        rqs[rqs_count++].term_id = terms[i]->term_id;
     }
 
-    assert(root->postings);
-    printf("--- RESULTS: %d pages\n", root->info.n_entries);
-    for(int i=0; i<root->info.n_entries; i++)
-        printf("  %d: %s\n", i+1, artitles.lookup(((int *)root->postings)[i]));
+    posrc.request(rqs, rqs_count, LEMMATIZED);
+
+    while(int count = posrc.wait())
+        while(count--)
+        {
+            const PostingsSource::ReadRq *rq = rqs + (rqs_done++);
+            talloc_steal(memctx, rq->data);
+
+            Dictionary::PostingListInfo info =
+                dictionary.getPostingListInfo(rq->term_id);
+            void *decoded = PostingsDecoder::decode_lemmatized(
+                                Reader(rq->data, info.size), info.n_postings);
+            talloc_steal(memctx, decoded);
+
+            info("processing posting list for term 0x%08x\n", rq->term_id);
+
+            for(int i=0; i<term_count; i++) 
+                if(terms[i]->term_id == rq->term_id) {
+                    terms[i]->postings = decoded;
+                    evaluateNode(terms[i]->parent);
+                }
+        }
+
+    const int *postings = (const int *)root->postings;
+    assert(postings);
+    printf("--- RESULTS: %d pages\n", root->n_postings);
+    for(int i=0; i<root->n_postings; i++) 
+        printf("  %d: %s\n", i+1, artitles.lookup(postings[i]));
+}
+
+void BooleanQueryEngine::run(QueryNode *root) {
+    BooleanQueryEngine e;
+    e.do_run(root);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -877,17 +1014,17 @@ class PhraseQueryEngine
     void *memctx;
 
 public:
-    void run(QueryNode *root);
+    static void run(QueryNode *root);
 };
 
 void PhraseQueryEngine::run(QueryNode *root)
 {
-    memctx = talloc_parent(root);
+    ; /* TODO */
 }
 
 /* -------------------------------------------------------------------------- */
 
-static void dump_query_tree(const QueryNode *node, int indent = 0)
+static void dump_query_tree(const QueryNode *node, int indent)
 {
     static const char spaces[] = "                                                                                ";
     info("%.*s %p: ", indent, spaces, node);
@@ -897,15 +1034,16 @@ static void dump_query_tree(const QueryNode *node, int indent = 0)
     }
     switch(node->type) {
         case QueryNode::TERM:
-            info("TERM: »%s«\n", node->term_text);
+            info("TERM: »%s« (0x%08x), postings: %d\n",
+                node->term_text, node->term_id, node->n_postings);
             return;
         case QueryNode::OR:
-            info("OR\n");
+            info("OR, expected: %d\n", node->estim_postings);
             dump_query_tree(node->lhs, 3+indent);
             dump_query_tree(node->rhs, 3+indent);
             return;
         case QueryNode::AND:
-            info("AND\n");
+            info("AND, expected: %d\n", node->estim_postings);
             dump_query_tree(node->lhs, 3+indent);
             dump_query_tree(node->rhs, 3+indent);
             return;
@@ -919,29 +1057,27 @@ static void dump_query_tree(const QueryNode *node, int indent = 0)
 
 static void run_query(const char *query)
 {
-    QueryParser qp;
-    QueryNode *root = qp.run(query);
+    Timer timer; timer.start();
+
+    QueryNode *root = QueryParser::run(query);
     if(!root)
         return;
 
-    dump_query_tree(root);
-
-    if(root->type == QueryNode::PHRASE) {
-        PhraseQueryEngine e;
-        e.run(root);
-    } else {
-        BooleanQueryEngine e;
-        e.run(root);
-    }
+    if(root->type == QueryNode::PHRASE)
+        PhraseQueryEngine::run(root);
+    else
+        BooleanQueryEngine::run(root);
 
     talloc_free(talloc_parent(root));
+
+    printf("--- total time: %.3lf seconds\n", timer.end());
 }
 
 int main(void)
 {
     artitles.read("db/artitles");
     dictionary.read("db/dictionary");
-    posrdr.start("db/positional", "db/lemmatized");
+    posrc.start("db/positional", "db/lemmatized");
 
     for(;;) {
         static char buffer[1024];

@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
+extern "C" {
 #include <talloc.h>
+}
 #include <algorithm>
 #include "bufrw.h"
 

@@ -54,7 +54,7 @@ static void lost_uniqness()
     std::vector<word> v;
     v.reserve(words.size() + result.size());
 
-    int i=0, j=0;
+    unsigned int i=0, j=0;
     while(i < result.size() && j < words.size())
     {
         while(j+1 < words.size() && words[j] == words[j+1]) j++;
@@ -113,8 +113,8 @@ int main(int argc, char *argv[])
     uniqness_tolerance = 0;
     lost_uniqness();
 
-    printf("distinct words: %d\n", result.size());
-    for(int i=1; i<result.size(); i++)
+    printf("distinct words: %d\n", (int)result.size());
+    for(int i=1; i<(int)result.size(); i++)
         assert(result[i-1] < result[i]);
 
     Writer wr;
@@ -128,16 +128,16 @@ int main(int argc, char *argv[])
     printf("writing bucket sizes\n");
     for(int i=0,p=0; i<th.buckets(); i++) {
         int q = p;
-        while(p<result.size() && result[p].hash == i) p++;
+        while(p<(int)result.size() && result[p].hash == i) p++;
         wr.write_u8(p-q);
     }
 
     printf("writing word lengths\n");
-    for(int i=0; i<result.size(); i++)
+    for(int i=0; i<(int)result.size(); i++)
         wr.write_u8(result[i].length());
 
     printf("writing result\n");
-    for(int i=0; i<result.size(); i++)
+    for(int i=0; i<(int)result.size(); i++)
         wr.write_raw(result[i].data, result[i].length());
 
     printf("flushing\n");
