@@ -659,9 +659,13 @@ static void resolve_terms(QueryNode *node, IndexType idxtype)
 
 /* -------------------------------------------------------------------------- */
 
-class BooleanQueryOptimizer
+class BooleanQueryEngine
 {
+    void *memctx;
     QueryNode **scratchpad;
+
+    static int countTerms(const QueryNode *node);
+    static int extractTerms(QueryNode *node, QueryNode **ptr);
 
     static int count_nodes(const QueryNode *node);
     static void linearize(QueryNode *node);
@@ -670,18 +674,44 @@ class BooleanQueryOptimizer
     static void fix_parents(QueryNode *node);
     static void check_parents(const QueryNode *node);
 
-    QueryNode *do_run(QueryNode *root);
+    QueryNode *optimize(QueryNode *root);
+
+    void evaluateAndNode(QueryNode *node) __attribute__((hot));
+    void evaluateOrNode(QueryNode *node) __attribute__((hot));
+    inline void evaluateNode(QueryNode *node);
+
+    void do_run(QueryNode *root);
 
 public:
-    static inline QueryNode *run(QueryNode *root);
+    static inline void run(QueryNode *root);
 };
 
-int BooleanQueryOptimizer::count_nodes(const QueryNode *node)
+int BooleanQueryEngine::countTerms(const QueryNode *node)
+{
+    return !node ? 0 :
+           node->type == QueryNode::TERM ? 1 :
+           countTerms(node->lhs) + countTerms(node->rhs);
+}
+
+int BooleanQueryEngine::extractTerms(QueryNode *node, QueryNode **ptr)
+{
+    if(!node)
+        return 0;
+    if(node->type == QueryNode::TERM) {
+        *ptr = node;
+        return 1;
+    }
+    int l = extractTerms(node->lhs, ptr);
+    int r = extractTerms(node->rhs, ptr+l);
+    return l+r;
+}
+
+int BooleanQueryEngine::count_nodes(const QueryNode *node)
 {
     return !node ? 0 : 1 + count_nodes(node->lhs) + count_nodes(node->rhs);
 }
 
-void BooleanQueryOptimizer::linearize(QueryNode *node)
+void BooleanQueryEngine::linearize(QueryNode *node)
 {
     if(!node) return;
      
@@ -703,7 +733,7 @@ void BooleanQueryOptimizer::linearize(QueryNode *node)
     linearize(node->rhs);
 }
 
-QueryNode *BooleanQueryOptimizer::arrange(QueryNode *node)
+QueryNode *BooleanQueryEngine::arrange(QueryNode *node)
 {
     /* check node type */
     QueryNode::Type type = node->type;
@@ -811,7 +841,7 @@ QueryNode *BooleanQueryOptimizer::arrange(QueryNode *node)
     return children[0];
 }
 
-void BooleanQueryOptimizer::fix_parents(QueryNode *node)
+void BooleanQueryEngine::fix_parents(QueryNode *node)
 {
     if(!node) return;
     if(node->lhs) node->lhs->parent = node;
@@ -820,7 +850,7 @@ void BooleanQueryOptimizer::fix_parents(QueryNode *node)
     fix_parents(node->rhs);
 }
 
-void BooleanQueryOptimizer::check_parents(const QueryNode *node)
+void BooleanQueryEngine::check_parents(const QueryNode *node)
 {
     if(!node) return;
     assert(!node->lhs || node->lhs->parent == node);
@@ -829,69 +859,29 @@ void BooleanQueryOptimizer::check_parents(const QueryNode *node)
     check_parents(node->rhs);
 }
 
-QueryNode *BooleanQueryOptimizer::do_run(QueryNode *root)
+QueryNode *BooleanQueryEngine::optimize(QueryNode *root)
 {
-    QueryNode *canary = (QueryNode *)0xbadc0de1l;
-
     int node_count = count_nodes(root);
-    QueryNode *_scratchpad[node_count+1];
+
+    QueryNode *canary1 = (QueryNode *)0xbadc0de1L,
+              *canary2 = (QueryNode *)0xdeadbeefL;
+
+    QueryNode *_scratchpad[node_count+2];
+    _scratchpad[0] = canary1;
+    _scratchpad[node_count+1] = canary2;
     
-    scratchpad = _scratchpad;
-    _scratchpad[node_count] = canary;
+    scratchpad = _scratchpad+1;
     
     linearize(root);
     root = arrange(root);
     fix_parents(root);
     check_parents(root);
 
-    assert(scratchpad == _scratchpad &&
-           _scratchpad[node_count] == canary);
+    assert(scratchpad == _scratchpad+1 &&
+           _scratchpad[0] == canary1 &&
+           _scratchpad[node_count+1] == canary2);
 
     return root;
-}
-
-QueryNode *BooleanQueryOptimizer::run(QueryNode *root) {
-    BooleanQueryOptimizer opt;
-    return opt.do_run(root);
-}
-
-
-
-class BooleanQueryEngine
-{
-    void *memctx;
-
-    static int countTerms(const QueryNode *node);
-    static int extractTerms(QueryNode *node, QueryNode **ptr);
-
-    void evaluateAndNode(QueryNode *node) __attribute__((hot));
-    void evaluateOrNode(QueryNode *node) __attribute__((hot));
-    inline void evaluateNode(QueryNode *node);
-
-    void do_run(QueryNode *root);
-
-public:
-    static inline void run(QueryNode *root);
-};
-
-int BooleanQueryEngine::countTerms(const QueryNode *node)
-{
-    return !node ? 0 :
-           node->type == QueryNode::TERM ? 1 :
-           countTerms(node->lhs) + countTerms(node->rhs);
-}
-
-int BooleanQueryEngine::extractTerms(QueryNode *node, QueryNode **ptr)
-{
-    if(!node)
-        return 0;
-    if(node->type == QueryNode::TERM) {
-        *ptr = node;
-        return 1;
-    }
-    int l = extractTerms(node->lhs, ptr);
-    int r = extractTerms(node->rhs, ptr+l);
-    return l+r;
 }
 
 void BooleanQueryEngine::evaluateNode(QueryNode *node)
@@ -981,7 +971,8 @@ void BooleanQueryEngine::do_run(QueryNode *root)
 
     resolve_terms(root, LEMMATIZED);
     info("raw query:\n"); dump_query_tree(root);
-    root = BooleanQueryOptimizer::run(root);
+
+    root = optimize(root);
     info("optimized query:\n"); dump_query_tree(root);
 
     int term_count = countTerms(root);
