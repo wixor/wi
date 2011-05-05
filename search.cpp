@@ -110,7 +110,8 @@ class Dictionary
 
     struct Term {
         int lemmatized_list_id;
-        int text_length;
+        short text_length;
+        bool stop;
         char *text;
     };
 
@@ -123,22 +124,38 @@ class Dictionary
     void do_read(Reader rd);
 
 public:
-    struct PostingListInfo {
+    struct PostingsInfo {
         off_t offset;
         size_t size;
         int n_postings;
     };
 
-    typedef int Key;
-
     Dictionary();
     ~Dictionary();
 
     void read(const char *filename);
-    Key lookup(const char *text, size_t len, IndexType idxtype) const;
-
-    inline PostingListInfo getPostingListInfo(Key key) const;
+    
+    class Key {
+        int key;
+    public:
+        inline Key() : key(0) { }
+        inline Key(int key) : key(key) { }
+        inline IndexType getIndexType() const;
+        inline PostingsInfo getPostingsInfo() const;
+        inline off_t getOffset() const { return getPostingsInfo().offset; }
+        inline size_t getSize() const { return getPostingsInfo().size; }
+        inline int getNPostings() const { return getPostingsInfo().n_postings; }
+        inline operator int() const { return key; }
+        inline bool operator==(Key k) { return key == k.key; }
+    };
+    
+    int lookup(const char *text, size_t len) const;
+    inline bool isStopWord(int term_id) const;
+    inline Key getPostingsKey(int term_id, IndexType idxtype) const;
 };
+
+static Dictionary dictionary; /* GLOBAL */
+static long empty_posting_list; /* GLOBAL */
 
 Dictionary::Dictionary() {
     memctx = NULL;
@@ -201,6 +218,10 @@ void Dictionary::do_read(Reader rd)
             while(bucket_size--) {
                 t->lemmatized_list_id = rd.read_u24();
                 t->text_length = rd.read_u8();
+                if(t->text_length & 0x80) {
+                    t->stop = true;
+                    t->text_length &=~ 0x80;
+                }
                 t++;
             }
         }
@@ -240,7 +261,7 @@ void Dictionary::do_read(Reader rd)
     assert(rd.eof());
 }
 
-Dictionary::Key Dictionary::lookup(const char *text, size_t len, IndexType idxtype) const
+int Dictionary::lookup(const char *text, size_t len) const
 {
     int h = hasher.hash(text, len);
 
@@ -252,23 +273,36 @@ Dictionary::Key Dictionary::lookup(const char *text, size_t len, IndexType idxty
         if(memcmp(text, t->text, len) != 0)
             continue;
     
-        int k = buckets[h] - buckets[0] + i;
-        switch(idxtype) {
-            case LEMMATIZED: return terms[k].lemmatized_list_id | 0x80000000;
-            case POSITIONAL: return k;
-        }
-        abort();
+        return buckets[h] - buckets[0] + i;
     }
 
     return -1;
 }
 
-Dictionary::PostingListInfo Dictionary::getPostingListInfo(Key key) const
-{
-    PostingList *lists = (key & 0x80000000) ? lemmatized : positional;
-    int k = key & ~0x80000000;
+bool Dictionary::isStopWord(int term_id) const {
+    return terms[term_id].stop;
+}
 
-    PostingListInfo ret;
+Dictionary::Key Dictionary::getPostingsKey(int term_id, IndexType idxtype) const
+{
+    switch(idxtype) {
+        case LEMMATIZED: return Key(terms[term_id].lemmatized_list_id | 0x80000000);
+        case POSITIONAL: return Key(term_id);
+    }
+    abort();
+}
+
+IndexType Dictionary::Key::getIndexType() const {
+    return key & 0x80000000 ? LEMMATIZED : POSITIONAL;
+}
+
+Dictionary::PostingsInfo Dictionary::Key::getPostingsInfo() const
+{
+    int k = key & ~0x80000000;
+    PostingList *lists =
+        (key & 0x80000000) ? dictionary.lemmatized : dictionary.positional;
+
+    PostingsInfo ret;
     ret.offset = lists[k].offset;
     ret.size = lists[k+1].offset - lists[k].offset;
     ret.n_postings = lists[k].n_postings;
@@ -276,16 +310,13 @@ Dictionary::PostingListInfo Dictionary::getPostingListInfo(Key key) const
     return ret;
 }
 
-static Dictionary dictionary; /* GLOBAL */
-static long empty_posting_list; /* GLOBAL */
-
 /* -------------------------------------------------------------------------- */
 
 class PostingsSource
 {
 public:
     struct ReadRq {
-        Dictionary::Key term_id;
+        Dictionary::Key postings_key;
         void *data;
     };
 
@@ -296,7 +327,7 @@ private:
 
     pthread_t thread;
     ReadRq *rqs;
-    int rqs_count, fd, rqs_left;
+    int rqs_count, rqs_left;
 
     static int openIndex(const char *filename, uint32_t magic);
     static void* runThreadFunc(void *);
@@ -309,7 +340,7 @@ public:
     void start(const char *positional_filename, const char *lemmatized_filename);
     void stop();
 
-    void request(ReadRq *rqs, int count, IndexType idxtype);
+    void request(ReadRq *rqs, int count);
     int wait();
 };
 
@@ -325,17 +356,18 @@ void PostingsSource::threadFunc()
         uint64_t foo;
         eventfd_read(evfd_rq, &foo);
 
-        FileIO fio(fd);
         for(int i=0; i<rqs_count; i++)
         {
-            Dictionary::PostingListInfo info =
-                dictionary.getPostingListInfo(rqs[i].term_id);
-            rqs[i].data = fio.read_raw_alloc(info.size, info.offset);
-            talloc_steal(memctx, rqs[i].data);
+            IndexType idxtype = 
+                rqs[i].postings_key.getIndexType();
+            Dictionary::PostingsInfo info =
+                rqs[i].postings_key.getPostingsInfo();
+            
+            int fd = idxtype == LEMMATIZED ? lemmatized_fd : positional_fd;
+            FileIO(fd).read_raw(rqs[i].data, info.size, info.offset);
 
             eventfd_write(evfd_done, 1);
         }
-        fd = -1;
     }
 }
 
@@ -371,7 +403,6 @@ void PostingsSource::start(const char *positional_filename, const char *lemmatiz
 
     positional_fd = openIndex(positional_filename, 0x50584449);
     lemmatized_fd = openIndex(lemmatized_filename, 0x4c584449);
-    fd = -1;
     rqs_left = 0;
 
     assert(pthread_create(&thread, NULL, &runThreadFunc, this) == 0);
@@ -388,18 +419,16 @@ void PostingsSource::stop()
     talloc_free(memctx);
 }
 
-void PostingsSource::request(ReadRq *rqs, int count, IndexType idxtype)
+void PostingsSource::request(ReadRq *rqs, int count)
 {
-    info("requesting %d posting lists from %s index for terms:",
-            count, idxtype == LEMMATIZED ? "lemmatized" : "positional");
+    info("requesting %d posting lists:", count);
     for(int i=0; i<count; i++)
-        info(" 0x%08x", rqs[i].term_id);
+        info(" 0x%08x", (int)rqs[i].postings_key);
     info("\n");
 
     if(!count)
         return;
 
-    fd = idxtype == POSITIONAL ? positional_fd : lemmatized_fd;
     this->rqs = rqs;
     rqs_count = rqs_left = count;
 
@@ -457,7 +486,8 @@ struct QueryNode
     QueryNode *lhs, *rhs, *parent;
 
     const char *term_text; /* actual term text */
-    Dictionary::Key term_id; /* index of term in dictionary */
+    int term_id; /* index of term in dictionary */
+    Dictionary::Key postings_key; /* postings list identifier */
 
     int estim_postings; /* estimate number of entries in posting list */
     int depth; /* depth of sub-tree */
@@ -603,15 +633,20 @@ static void resolve_terms(QueryNode *node, IndexType idxtype)
     if(node->type == QueryNode::TERM)
     {
         node->term_id =
-            dictionary.lookup(node->term_text, strlen(node->term_text), idxtype);
+            dictionary.lookup(node->term_text, strlen(node->term_text));
 
-        if(node->term_id != -1) {
-            Dictionary::PostingListInfo info = 
-                dictionary.getPostingListInfo(node->term_id);
+        if(node->term_id == -1) 
+            info("term »%s« does not appear in dictionary\n",
+                 node->term_text);
+        else {
+            node->postings_key =
+                dictionary.getPostingsKey(node->term_id, idxtype);
+            Dictionary::PostingsInfo info =
+                node->postings_key.getPostingsInfo();
             node->n_postings = info.n_postings;
 
-            info("resolved term »%s« (0x%08x): has %d postings, list at 0x%08llx, size %zu\n",
-                  node->term_text, node->term_id, node->n_postings, (unsigned long long)info.offset, info.size);
+            info("resolved term »%s« (%d): postings id 0x%08x, has %d postings at 0x%08llx, size %zu\n",
+                  node->term_text, node->term_id, (int)node->postings_key, node->n_postings, (unsigned long long)info.offset, info.size);
         }
 
         if(node->n_postings == 0)
@@ -724,7 +759,7 @@ QueryNode *BooleanQueryOptimizer::arrange(QueryNode *node)
 
         bool dupli = false;
         for(QueryNode **q = children; q<p; q++)
-            if((*q)->type == (*p)->type && (*q)->term_id == (*p)->term_id) {
+            if((*q)->type == (*p)->type && (*q)->postings_key == (*p)->postings_key) {
                 info("node %p is duplicate of node %p, removing\n", (*p), (*q));
                 dupli = true;
                 break;
@@ -962,34 +997,37 @@ void BooleanQueryEngine::do_run(QueryNode *root)
 
         bool dupli = false;
         for(int j=0; j<i; j++)
-            if(terms[j]->term_id == terms[i]->term_id) {
+            if(terms[j]->postings_key == terms[i]->postings_key) {
                 info("term %d is duplicate of term %d\n", i,j);
                 dupli = true;
                 break;
             }
         if(dupli) continue;
 
-        rqs[rqs_count++].term_id = terms[i]->term_id;
+        PostingsSource::ReadRq *rq = rqs + (rqs_count++);
+        rq->postings_key = terms[i]->postings_key;
+        rq->data = talloc_size(memctx, rq->postings_key.getSize());
+        assert(rq->data);
     }
 
-    posrc.request(rqs, rqs_count, LEMMATIZED);
+    posrc.request(rqs, rqs_count);
 
     while(int count = posrc.wait())
         while(count--)
         {
             const PostingsSource::ReadRq *rq = rqs + (rqs_done++);
-            talloc_steal(memctx, rq->data);
 
-            Dictionary::PostingListInfo info =
-                dictionary.getPostingListInfo(rq->term_id);
-            void *decoded = PostingsDecoder::decode_lemmatized(
-                                Reader(rq->data, info.size), info.n_postings);
+            Dictionary::PostingsInfo info =
+                rq->postings_key.getPostingsInfo();
+            void *decoded =
+                PostingsDecoder::decode_lemmatized(
+                    Reader(rq->data, info.size), info.n_postings);
             talloc_steal(memctx, decoded);
 
-            info("processing posting list for term 0x%08x\n", rq->term_id);
+            info("processing posting list 0x%08x\n", (int)rq->postings_key);
 
             for(int i=0; i<term_count; i++) 
-                if(terms[i]->term_id == rq->term_id) {
+                if(terms[i]->postings_key == rq->postings_key) {
                     terms[i]->postings = decoded;
                     evaluateNode(terms[i]->parent);
                 }
@@ -1034,7 +1072,7 @@ static void dump_query_tree(const QueryNode *node, int indent)
     }
     switch(node->type) {
         case QueryNode::TERM:
-            info("TERM: »%s« (0x%08x), postings: %d\n",
+            info("TERM: »%s« (%d), postings: %d\n",
                 node->term_text, node->term_id, node->n_postings);
             return;
         case QueryNode::OR:
