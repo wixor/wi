@@ -525,10 +525,10 @@ class QueryParser
     QueryNode *parsePhrase(); /* "query" */
     QueryNode *parseQuery();
 
-    QueryNode *do_run(const char *query);
+    inline QueryNode *do_run(const char *query);
 
 public:
-    static inline QueryNode *run(const char *query);
+    static QueryNode *run(const char *query);
 };
 
 QueryNode *QueryParser::makeNode(QueryNode::Type type, QueryNode *lhs, QueryNode *rhs, const char *term) const
