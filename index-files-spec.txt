@@ -151,7 +151,8 @@ u8[]: ilość słów w kubełku
 dla każdego kubełka:
     dla każdego słowa:
         u24: numer listy lematyzowanej
-        u8: długość słowa
+        u8: długość słowa na dolnych 7 bitach,
+            ósmy bit ustawiony oznacza stopword
 dla każdej listy pozycyjnej:
     uv: długość w bajtach
     uv: ilość wpisów
