@@ -43,7 +43,7 @@ static void read_dict(Reader rd)
     terms[0] = (const char *)0L;
     for(int i=1; i<=term_count; i++) {
         rd.read_u24();
-        terms[i] = terms[i-1] + rd.read_u8();
+        terms[i] = terms[i-1] + (rd.read_u8() &~ 0x80);
     }
 
     /* read posting list info */

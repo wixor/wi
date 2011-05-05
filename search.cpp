@@ -155,7 +155,6 @@ public:
 };
 
 static Dictionary dictionary; /* GLOBAL */
-static long empty_posting_list; /* GLOBAL */
 
 Dictionary::Dictionary() {
     memctx = NULL;
@@ -496,6 +495,21 @@ struct QueryNode
     void *postings; /* actual posting list */
 };
 
+static long empty_posting_list = -42; /* GLOBAL */
+
+static QueryNode makeEmptyQueryNode()
+{
+    QueryNode node;
+    node.type = QueryNode::TERM;
+    node.lhs = node.rhs = node.parent = NULL;
+    node.term_text = NULL;
+    node.term_id = -1;
+    node.depth = node.estim_postings = node.n_postings = 0;
+    node.postings = &empty_posting_list;
+    return node;
+}
+static const QueryNode emptyQueryNode = makeEmptyQueryNode(); /* GLOBAL */
+
 /* -------------------------------------------------------------------------- */
 
 class QueryParser
@@ -662,35 +676,50 @@ static void resolve_terms(QueryNode *node, IndexType idxtype)
 class BooleanQueryEngine
 {
     void *memctx;
+    QueryNode **terms;
     QueryNode **scratchpad;
+    PostingsSource::ReadRq *rqs;
+    int term_count, node_count, stopword_count, rqs_count;
 
     static int countTerms(const QueryNode *node);
+    static int countNodes(const QueryNode *node);
+    static int countStopwords(const QueryNode *node);
     static int extractTerms(QueryNode *node, QueryNode **ptr);
 
-    static int count_nodes(const QueryNode *node);
     static void linearize(QueryNode *node);
-    QueryNode *arrange(QueryNode *node);
+    QueryNode *optimize(QueryNode *node);
+    static void fixParents(QueryNode *node);
 
-    static void fix_parents(QueryNode *node);
-    static void check_parents(const QueryNode *node);
-
-    QueryNode *optimize(QueryNode *root);
+    void createRqs();
+    void processPostings();
+    void printResult(const QueryNode *root);
 
     void evaluateAndNode(QueryNode *node) __attribute__((hot));
     void evaluateOrNode(QueryNode *node) __attribute__((hot));
     inline void evaluateNode(QueryNode *node);
 
-    void do_run(QueryNode *root);
+    inline void do_run(QueryNode *root);
 
 public:
-    static inline void run(QueryNode *root);
+    static void run(QueryNode *root);
 };
 
-int BooleanQueryEngine::countTerms(const QueryNode *node)
-{
+int BooleanQueryEngine::countTerms(const QueryNode *node) {
     return !node ? 0 :
            node->type == QueryNode::TERM ? 1 :
            countTerms(node->lhs) + countTerms(node->rhs);
+}
+
+int BooleanQueryEngine::countNodes(const QueryNode *node) {
+    return !node ? 0 : 1 + countNodes(node->lhs) + countNodes(node->rhs);
+}
+
+int BooleanQueryEngine::countStopwords(const QueryNode *node) {
+    if(node->type == QueryNode::TERM)
+        return dictionary.isStopWord(node->term_id);
+    if(node->type == QueryNode::AND)
+        return countStopwords(node->lhs) + countStopwords(node->rhs);
+    return 0;
 }
 
 int BooleanQueryEngine::extractTerms(QueryNode *node, QueryNode **ptr)
@@ -704,11 +733,6 @@ int BooleanQueryEngine::extractTerms(QueryNode *node, QueryNode **ptr)
     int l = extractTerms(node->lhs, ptr);
     int r = extractTerms(node->rhs, ptr+l);
     return l+r;
-}
-
-int BooleanQueryEngine::count_nodes(const QueryNode *node)
-{
-    return !node ? 0 : 1 + count_nodes(node->lhs) + count_nodes(node->rhs);
 }
 
 void BooleanQueryEngine::linearize(QueryNode *node)
@@ -733,7 +757,7 @@ void BooleanQueryEngine::linearize(QueryNode *node)
     linearize(node->rhs);
 }
 
-QueryNode *BooleanQueryEngine::arrange(QueryNode *node)
+QueryNode *BooleanQueryEngine::optimize(QueryNode *node)
 {
     /* check node type */
     QueryNode::Type type = node->type;
@@ -742,7 +766,7 @@ QueryNode *BooleanQueryEngine::arrange(QueryNode *node)
         return node;
     }
 
-    /* extract nodes of this group (sharing the functor */
+    /* extract nodes of this group (sharing the functor) */
     QueryNode **base = scratchpad, **pool = base;
     for(QueryNode *p = node; p->type == type; p = p->lhs)
         *scratchpad++ = p;
@@ -750,8 +774,8 @@ QueryNode *BooleanQueryEngine::arrange(QueryNode *node)
     /* extract children of this group's nodes */   
     QueryNode **children = scratchpad;
     for(QueryNode **p = pool; p < children; p++)
-        *scratchpad++ = (*p)->rhs = arrange((*p)->rhs);
-    *scratchpad++ = children[-1]->lhs = arrange(children[-1]->lhs);
+        *scratchpad++ = (*p)->rhs = optimize((*p)->rhs);
+    *scratchpad++ = children[-1]->lhs = optimize(children[-1]->lhs);
 
     QueryNode **end = scratchpad;
 
@@ -766,9 +790,7 @@ QueryNode *BooleanQueryEngine::arrange(QueryNode *node)
         for(QueryNode **p = children; p<end; p++) 
             if((*p)->estim_postings == 0) {
                 info("found empty node %p in AND group, emptying whole group\n", (*p));
-                node->type = QueryNode::TERM;
-                node->n_postings = node->estim_postings = 0;
-                node->postings = &empty_posting_list;
+                *node = emptyQueryNode;
                 scratchpad = base;
                 return node;
             }
@@ -799,6 +821,22 @@ QueryNode *BooleanQueryEngine::arrange(QueryNode *node)
             *p = *--end;
         else
             p++;
+    }
+
+    /* remove stopwords */
+    if(type == QueryNode::AND && stopword_count*2 < term_count) 
+        for(QueryNode **p = children; p<end; )
+            if((*p)->type != QueryNode::TERM ||
+               !dictionary.isStopWord((*p)->term_id))
+                p++;
+            else 
+                *p = *--end;
+
+    /* check if there are any nodes left */
+    if(children == end) {
+        *node = emptyQueryNode;
+        scratchpad = base;
+        return node;
     }
 
     /* find optimal execution order */
@@ -841,47 +879,73 @@ QueryNode *BooleanQueryEngine::arrange(QueryNode *node)
     return children[0];
 }
 
-void BooleanQueryEngine::fix_parents(QueryNode *node)
+void BooleanQueryEngine::fixParents(QueryNode *node)
 {
     if(!node) return;
     if(node->lhs) node->lhs->parent = node;
     if(node->rhs) node->rhs->parent = node;
-    fix_parents(node->lhs);
-    fix_parents(node->rhs);
+    fixParents(node->lhs);
+    fixParents(node->rhs);
 }
 
-void BooleanQueryEngine::check_parents(const QueryNode *node)
+void BooleanQueryEngine::createRqs()
 {
-    if(!node) return;
-    assert(!node->lhs || node->lhs->parent == node);
-    assert(!node->rhs || node->rhs->parent == node);
-    check_parents(node->lhs);
-    check_parents(node->rhs);
+    rqs_count = 0;
+    for(int i=0; i<term_count; i++)
+    {
+        if(terms[i]->postings)
+            continue;
+
+        bool dupli = false;
+        for(int j=0; j<i; j++)
+            if(terms[j]->postings_key == terms[i]->postings_key) {
+                info("term %d is duplicate of term %d\n", i,j);
+                dupli = true;
+                break;
+            }
+        if(dupli) continue;
+
+        PostingsSource::ReadRq *rq = rqs + (rqs_count++);
+        rq->postings_key = terms[i]->postings_key;
+        rq->data = talloc_size(memctx, rq->postings_key.getSize());
+        assert(rq->data);
+    }
 }
 
-QueryNode *BooleanQueryEngine::optimize(QueryNode *root)
+void BooleanQueryEngine::processPostings()
 {
-    int node_count = count_nodes(root);
+    int rqs_done = 0;
 
-    QueryNode *canary1 = (QueryNode *)0xbadc0de1L,
-              *canary2 = (QueryNode *)0xdeadbeefL;
+    while(int count = posrc.wait())
+        while(count--)
+        {
+            const PostingsSource::ReadRq *rq = rqs + (rqs_done++);
 
-    QueryNode *_scratchpad[node_count+2];
-    _scratchpad[0] = canary1;
-    _scratchpad[node_count+1] = canary2;
-    
-    scratchpad = _scratchpad+1;
-    
-    linearize(root);
-    root = arrange(root);
-    fix_parents(root);
-    check_parents(root);
+            Dictionary::PostingsInfo info =
+                rq->postings_key.getPostingsInfo();
+            void *decoded =
+                PostingsDecoder::decode_lemmatized(
+                    Reader(rq->data, info.size), info.n_postings);
+            talloc_steal(memctx, decoded);
 
-    assert(scratchpad == _scratchpad+1 &&
-           _scratchpad[0] == canary1 &&
-           _scratchpad[node_count+1] == canary2);
+            info("processing posting list 0x%08x\n", (int)rq->postings_key);
 
-    return root;
+            for(int i=0; i<term_count; i++) 
+                if(terms[i]->postings_key == rq->postings_key) {
+                    terms[i]->postings = decoded;
+                    evaluateNode(terms[i]->parent);
+                }
+        }
+}
+
+void BooleanQueryEngine::printResult(const QueryNode *root)
+{
+    const int *postings = (const int *)root->postings;
+    assert(postings);
+
+    printf("--- RESULTS: %d pages\n", root->n_postings);
+    for(int i=0; i<root->n_postings; i++) 
+        printf("  %d: %s\n", i+1, artitles.lookup(postings[i]));
 }
 
 void BooleanQueryEngine::evaluateNode(QueryNode *node)
@@ -970,65 +1034,33 @@ void BooleanQueryEngine::do_run(QueryNode *root)
     memctx = talloc_parent(root);
 
     resolve_terms(root, LEMMATIZED);
-    info("raw query:\n"); dump_query_tree(root);
+    
+    info("raw query:\n");
+    dump_query_tree(root);
 
+    node_count = countNodes(root);
+    QueryNode *_scratchpad[node_count];
+    scratchpad = _scratchpad;
+
+    stopword_count = countStopwords(root);
+    linearize(root);
     root = optimize(root);
-    info("optimized query:\n"); dump_query_tree(root);
+    fixParents(root);
 
-    int term_count = countTerms(root);
-    QueryNode *terms[term_count];
+    info("optimized query:\n");
+    dump_query_tree(root);
+    
+    term_count = countTerms(root);
+    QueryNode *_terms[term_count];
+    PostingsSource::ReadRq _rqs[term_count];
+    terms = _terms;
+    rqs = _rqs;
+
     extractTerms(root, terms);
-
-    int rqs_count = 0, rqs_done = 0;
-    PostingsSource::ReadRq rqs[term_count];
-    for(int i=0; i<term_count; i++)
-    {
-        if(terms[i]->postings)
-            continue;
-
-        bool dupli = false;
-        for(int j=0; j<i; j++)
-            if(terms[j]->postings_key == terms[i]->postings_key) {
-                info("term %d is duplicate of term %d\n", i,j);
-                dupli = true;
-                break;
-            }
-        if(dupli) continue;
-
-        PostingsSource::ReadRq *rq = rqs + (rqs_count++);
-        rq->postings_key = terms[i]->postings_key;
-        rq->data = talloc_size(memctx, rq->postings_key.getSize());
-        assert(rq->data);
-    }
-
+    createRqs();
     posrc.request(rqs, rqs_count);
-
-    while(int count = posrc.wait())
-        while(count--)
-        {
-            const PostingsSource::ReadRq *rq = rqs + (rqs_done++);
-
-            Dictionary::PostingsInfo info =
-                rq->postings_key.getPostingsInfo();
-            void *decoded =
-                PostingsDecoder::decode_lemmatized(
-                    Reader(rq->data, info.size), info.n_postings);
-            talloc_steal(memctx, decoded);
-
-            info("processing posting list 0x%08x\n", (int)rq->postings_key);
-
-            for(int i=0; i<term_count; i++) 
-                if(terms[i]->postings_key == rq->postings_key) {
-                    terms[i]->postings = decoded;
-                    evaluateNode(terms[i]->parent);
-                }
-        }
-
-    const int *postings = (const int *)root->postings;
-    assert(postings);
-    printf("--- RESULTS: %d pages\n", root->n_postings);
-    for(int i=0; i<root->n_postings; i++) 
-        printf("  %d: %s\n", i+1, artitles.lookup(postings[i]));
+    processPostings();
+    printResult(root);
 }
 
 void BooleanQueryEngine::run(QueryNode *root) {
