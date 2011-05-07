@@ -8,6 +8,7 @@ all:
 
 search: search.o common.o
 mark-stop: mark-stop.o common.o
+dump-word: dump-word.o common.o 
 
 common.o: term.o fileio.o bufrw.o
 	$(LD) -r $^ -o $@
