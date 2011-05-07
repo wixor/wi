@@ -1122,7 +1122,8 @@ void PhraseQueryEngine::processPostings()
 
 void PhraseQueryEngine::processTerm(Reader rd, int n_postings, int offset)
 {
-    if(!docs) {
+    /* check if we have something to merge with */
+    if(unlikely(!docs)) {
         makeWorkingSet(rd, n_postings, offset);
         return;
     }
@@ -1138,7 +1139,7 @@ void PhraseQueryEngine::processTerm(Reader rd, int n_postings, int offset)
     int doc_id = rd.read_u24(),
         positions_size = rd.read_uv();
 
-    /* while there are documents left both in bytestream and in our buffer */
+    /* while there are documents left both in bytestream and in our working set */
     while(n_postings-- && docs_rdptr < docs_end)
     {
         /* create the reader for positions and process the document */
@@ -1231,6 +1232,8 @@ void PhraseQueryEngine::makeWorkingSet(Reader rd, int n_postings, int offset)
             p += prd.read_uv();
             *positions_wrptr++ = p;
         }
+        /* terminate the positions list with maxval */
+        *positions_wrptr++ = (pos_t)-1;
 
         /* move on to the next document */
         positions_offset += positions_size;
@@ -1255,7 +1258,8 @@ void PhraseQueryEngine::printResult()
 void PhraseQueryEngine::do_run(QueryNode *root)
 {
     memctx = talloc_parent(root);
-    docs = NULL;
+    docs = docs_rdptr = docs_wrptr = docs_end = NULL;
+    positions = positions_wrptr = NULL;
 
     resolveTerms(root, LEMMATIZED);
     
