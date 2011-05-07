@@ -181,10 +181,37 @@ dla każdego słowa:
 
 u32: magiczna liczba ('IDXP')
 dla każdego słowa (w kolejności takiej jak w słowniku)
-    u24: pierwszy dokument
-    uv: długość listy pozycyjnej pierwszego dokumentu (czy wystarczy u8?)
+    u32: długość w bajtach opisu dokumentów (pola z gwiazdką)
+    u24: pierwszy dokument (*)
+    uv: długość w bajtach listy pozycyjnej pierwszego dokumentu (*)
     dla każdego kolejnego dokumentu:
-        uv: różnica między numerami dokumentów
-        uv: długość listy pozycyjnej (czy wystarczy u8?)
+        uv: różnica między numerami dokumentów (*)
+        uv: długość w bajtach listy pozycyjnej (*)
     dla każdego dokumentu:
-        uv[]: różnice między kolejnymi wystąpieniami słowa w dokumencie
+        uv: pozycja pierwszego wystąpienia słowa w dokumencie
+        uv[]: różnice między kolejnymi pozycjami wystąpień słowa
+
+W słowniku dla list pozycyjnych "ilość wpisów" oznacza ilość _dokumentów_,
+natomiast "długość w bajtach" oznacza długość w bajtach całego powyższego
+dla jednego termu.
+
+Przykładowa lista pozycyjna:
+W słowniku zapisano "ilość wpisów" = 3, "długość w bajtach" = 21
+
+09 00 00 00 : długość w bajtach opisu dokumentów (z gwiazdkami) 
+
+fa 03 01    : numer pierwszego dokumentu (66554) (*)
+03          : długość w bajtach pierwszej listy pozycyjnej (z plusikami) (*)
+73          : offset drugiego dokumentu (66669) (*)
+01          : długość w bajtach drugiej listy pozycyjnej (z iksami) (*)
+83 6a       : offset trzeciego dokumentu (67159) (*)
+04          : długość w bajtach trzeciej listy pozycyjnej (z hashami) (*)
+
+ca 3f       : pozycja pierwszego wystąpienia w pierwszym dokumencie (9535) (+)
+05          : offset drugiego wystąpienia w pierwszym dokumencje (9540) (+)
+
+01          : pozycja pierwszego wystąpienia w drugim dokumencie (1) (x)
+
+3d          : pozycja pierwszego wystąpienia w trzecim dokumencie (61) (#)
+8a 8f 83    : offset drugiego wystąpienia w trzecim dokumencie (3904) (#)
+

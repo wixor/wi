@@ -450,34 +450,6 @@ static PostingsSource posrc; /* GLOBAL */
 
 /* -------------------------------------------------------------------------- */
 
-class PostingsDecoder
-{
-public:
-    static inline void *decodeLemmatized(Reader rd, int count);
-    static inline void *decodePositional(Reader rd, int count);
-};
-
-void* PostingsDecoder::decodeLemmatized(Reader rd, int count)
-{
-    assert(count > 0);
-    int *ret = talloc_array(NULL, int, count);
-
-    ret[0] = rd.read_u24();
-    for(int i=1; i<count; i++)
-        ret[i] = ret[i-1] + rd.read_uv();
-
-    return ret;
-}
-
-
-void* PostingsDecoder::decodePositional(Reader rd, int count)
-{
-    /* TODO */
-    abort();
-}
-
-/* -------------------------------------------------------------------------- */
-
 struct QueryNode
 {
     enum Type { AND, OR, PHRASE, TERM } type;
@@ -746,12 +718,12 @@ class BooleanQueryEngine : public QueryEngineBase
     QueryNode *optimize(QueryNode *node);
     static void fixParents(QueryNode *node);
 
-    void processPostings();
-    void printResult(const QueryNode *root);
-
+    inline void processPostings();
+    inline int* decodePostings(Reader rd, int count);
+    inline void evaluateNode(QueryNode *node);
     void evaluateAndNode(QueryNode *node) __attribute__((hot));
     void evaluateOrNode(QueryNode *node) __attribute__((hot));
-    inline void evaluateNode(QueryNode *node);
+    inline void printResult(const QueryNode *root);
 
     void do_run(QueryNode *root);
 
@@ -931,10 +903,8 @@ void BooleanQueryEngine::processPostings()
 
             Dictionary::PostingsInfo info =
                 rq->postings_key.getPostingsInfo();
-            void *decoded =
-                PostingsDecoder::decodeLemmatized(
-                    Reader(rq->data, info.size), info.n_postings);
-            talloc_steal(memctx, decoded);
+            int *decoded =
+                decodePostings(Reader(rq->data, info.size), info.n_postings);
 
             info("processing posting list 0x%08x\n", (int)rq->postings_key);
 
@@ -946,14 +916,17 @@ void BooleanQueryEngine::processPostings()
         }
 }
 
-void BooleanQueryEngine::printResult(const QueryNode *root)
+int* BooleanQueryEngine::decodePostings(Reader rd, int count)
 {
-    const int *postings = (const int *)root->postings;
-    assert(postings);
+    assert(count > 0);
+    int *ret = talloc_array(memctx, int, count);
+    assert(ret);
 
-    printf("--- RESULTS: %d pages\n", root->n_postings);
-    for(int i=0; i<root->n_postings; i++) 
-        printf("  %d: %s\n", i+1, artitles.lookup(postings[i]));
+    ret[0] = rd.read_u24();
+    for(int i=1; i<count; i++)
+        ret[i] = ret[i-1] + rd.read_uv();
+
+    return ret;
 }
 
 void BooleanQueryEngine::evaluateNode(QueryNode *node)
@@ -1037,6 +1010,16 @@ void BooleanQueryEngine::evaluateOrNode(QueryNode *node)
     node->n_postings = (C - (int *)node->postings) + (Aend - A) + (Bend - B);
 }
 
+void BooleanQueryEngine::printResult(const QueryNode *root)
+{
+    const int *postings = (const int *)root->postings;
+    assert(postings);
+
+    printf("--- RESULTS: %d pages\n", root->n_postings);
+    for(int i=0; i<root->n_postings; i++) 
+        printf("  %d: %s\n", i+1, artitles.lookup(postings[i]));
+}
+
 void BooleanQueryEngine::do_run(QueryNode *root)
 {
     memctx = talloc_parent(root);
@@ -1081,12 +1064,22 @@ class PhraseQueryEngine : public QueryEngineBase
 {
     int *offsets;
 
-    void sortTerms();
-    void processPostings();
-    void printResult();
+    struct doc {
+        int doc_id, positions_offs;
+    };
 
-    void evaluateTerm(QueryNode *term, int offset);
+    typedef unsigned short pos_t;
+    
+    struct doc *docs, *docs_rdptr, *docs_wrptr, *docs_end;
+    pos_t *positions, *positions_wrptr;
 
+    inline void sortTerms();
+    inline void processPostings();
+    void processTerm(Reader rd, int n_postings, int offset) __attribute__((hot));
+    inline void processDocument(int doc_id, Reader prd, int offset) __attribute__((hot));
+    inline void makeWorkingSet(Reader rd, int n_postings, int offset) __attribute__((hot));
+    inline void printResult();
+    
     void do_run(QueryNode *root);
 
 public:
@@ -1096,7 +1089,7 @@ public:
 void PhraseQueryEngine::sortTerms()
 {
     for(int i=0; i<term_count; i++)
-        offsets[i] = i;
+        offsets[i] = term_count-1-i;
 
     for(int i=0; i<term_count; i++)
         while(i > 0 && terms[i]->estim_postings < terms[i-1]->estim_postings) {
@@ -1117,27 +1110,146 @@ void PhraseQueryEngine::processPostings()
 
             Dictionary::PostingsInfo info =
                 rq->postings_key.getPostingsInfo();
-            void *decoded =
-                PostingsDecoder::decodePositional(
-                    Reader(rq->data, info.size), info.n_postings);
-            talloc_steal(memctx, decoded);
+            Reader rd(rq->data, info.size);
 
             info("processing posting list 0x%08x\n", (int)rq->postings_key);
 
             for(int i=0; i<term_count; i++) 
-                if(terms[i]->postings_key == rq->postings_key) {
-                    terms[i]->postings = decoded;
-                    evaluateTerm(terms[i], offsets[i]);
-                }
+                if(terms[i]->postings_key == rq->postings_key)
+                    processTerm(rd, info.n_postings, offsets[i]);
         }
+}
+
+void PhraseQueryEngine::processTerm(Reader rd, int n_postings, int offset)
+{
+    if(!docs) {
+        makeWorkingSet(rd, n_postings, offset);
+        return;
+    }
+
+    /* but the figers at start */
+    docs_rdptr = docs_wrptr = docs;
+    positions_wrptr = positions;
+
+    /* where the positions data in bytestream start */
+    int positions_offset = 4 + rd.read_u32();
+
+    /* read the first document info */
+    int doc_id = rd.read_u24(),
+        positions_size = rd.read_uv();
+
+    /* while there are documents left both in bytestream and in our buffer */
+    while(n_postings-- && docs_rdptr < docs_end)
+    {
+        /* create the reader for positions and process the document */
+        Reader prd((const char *)rd.buffer() + positions_offset, positions_size);
+        processDocument(doc_id, prd, offset);
+
+        /* move on to the next document */
+        positions_offset += positions_size;
+        if(n_postings) {
+            doc_id += rd.read_uv();
+            positions_size = rd.read_uv();
+        }
+    }
+
+    /* remember how many documents we have */
+    docs_end = docs_wrptr;
+}
+
+void PhraseQueryEngine::processDocument(int doc_id, Reader prd, int offset)
+{
+    /* skip past any documents earlier than this */
+    while(docs_rdptr < docs_end && docs_rdptr->doc_id < doc_id)
+        docs_rdptr++;
+
+    /* check if our document has been found */
+    if(docs_rdptr >= docs_end || docs_rdptr->doc_id > doc_id)
+        return;
+
+    /* fetch the document, remember where its positions start */
+    struct doc doc = *docs_rdptr;
+    const pos_t *positions_rdptr = positions + doc.positions_offs;
+
+    /* move the positions to the current writing finger */
+    doc.positions_offs = positions_wrptr - positions;
+
+    /* merge positions. all of them are incremented by 'offset' */
+    pos_t p = offset;
+    while(!prd.eof() && *positions_rdptr != (pos_t)-1)
+    {
+        /* get the next position */
+        p += prd.read_uv();
+        /* skip past position earlier than this */
+        while(*positions_rdptr < p) positions_rdptr++;
+        /* write the position back, if found */
+        if(*positions_rdptr == p)
+            *positions_wrptr++ = p;
+    }
+
+    /* if any position was written, terminate the positions
+     * list with maxval and write the document back */
+    if(positions_wrptr - positions > doc.positions_offs) {
+        *positions_wrptr++ = (pos_t)-1;
+        *docs_wrptr++ = doc;
+    }
+}
+
+
+void PhraseQueryEngine::makeWorkingSet(Reader rd, int n_postings, int offset)
+{
+    /* find out where positions start */
+    int positions_offset = 4 + rd.read_u32();
+
+    /* allocate memory (positions may be bigger than necessary) */
+    docs = talloc_array(memctx, struct doc, n_postings);
+    positions = talloc_array(memctx, pos_t, rd.size() - positions_offset);
+    assert(docs && positions);
+
+    /* set up writing fingers */
+    docs_wrptr = docs;
+    positions_wrptr = positions;
+
+    /* read the first document info */
+    int doc_id = rd.read_u24(),
+        positions_size = rd.read_uv();
+
+    /* while there are documents left both in bytestream and in our buffer */
+    while(n_postings--)
+    {
+        /* create the reader for positions and process the document */
+        Reader prd((const char *)rd.buffer() + positions_offset, positions_size);
+
+        /* write the doc */
+        docs_wrptr->doc_id = doc_id;
+        docs_wrptr->positions_offs = positions_wrptr - positions;
+        docs_wrptr++;
+
+        /* write the positions */
+        pos_t p = offset;
+        while(!prd.eof()) {
+            p += prd.read_uv();
+            *positions_wrptr++ = p;
+        }
+
+        /* move on to the next document */
+        positions_offset += positions_size;
+        if(n_postings) {
+            doc_id += rd.read_uv();
+            positions_size = rd.read_uv();
+        }
+    }
+
+    /* remember how many documents we have */
+    docs_end = docs_wrptr;
 }
 
 void PhraseQueryEngine::printResult()
 {
-}
-
-void PhraseQueryEngine::evaluateTerm(QueryNode *term, int offset)
-{
+    int n_documents = docs_end - docs;
+    printf("--- RESULTS: %d pages\n", n_documents);
+    for(int i=0; i<n_documents; i++) 
+        printf("  %d: %s\n", i+1, artitles.lookup(docs[i].doc_id));
 }
 
 void PhraseQueryEngine::do_run(QueryNode *root)
