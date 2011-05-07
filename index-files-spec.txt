@@ -5,8 +5,8 @@ Oznaczenia:
     uv:
         unsigned variable length coding: dzieli bloki na 7-bitowe kawałki,
         koduje każdy kawałek jako jeden bajt z najwyższym bitem ustawionym
-        dla oznaczenia ostatniego kawałka; kawałki są kodowane od najstarszego
-        do najmłodszego.
+        dla oznaczenia wszystkich kawałków poza ostatnim; kawałki są
+        kodowane od najstarszego do najmłodszego.
     utf8:
         napis w utf-8
     utf8z:
