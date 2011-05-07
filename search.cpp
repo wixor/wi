@@ -1255,6 +1255,7 @@ void PhraseQueryEngine::printResult()
 void PhraseQueryEngine::do_run(QueryNode *root)
 {
     memctx = talloc_parent(root);
+    docs = NULL;
 
     resolveTerms(root, LEMMATIZED);
     
