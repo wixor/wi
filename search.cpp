@@ -525,10 +525,10 @@ class QueryParser
     QueryNode *parsePhrase(); /* "query" */
     QueryNode *parseQuery();
 
-    inline QueryNode *do_run(const char *query);
+    QueryNode *do_run(const char *query);
 
 public:
-    static QueryNode *run(const char *query);
+    static inline QueryNode *run(const char *query);
 };
 
 QueryNode *QueryParser::makeNode(QueryNode::Type type, QueryNode *lhs, QueryNode *rhs, const char *term) const
@@ -698,10 +698,10 @@ class BooleanQueryEngine
     void evaluateOrNode(QueryNode *node) __attribute__((hot));
     inline void evaluateNode(QueryNode *node);
 
-    inline void do_run(QueryNode *root);
+    void do_run(QueryNode *root);
 
 public:
-    static void run(QueryNode *root);
+    static inline void run(QueryNode *root);
 };
 
 int BooleanQueryEngine::countTerms(const QueryNode *node) {
@@ -1074,13 +1074,20 @@ class PhraseQueryEngine
 {
     void *memctx;
 
+    void do_run(QueryNode *root);
+
 public:
-    static void run(QueryNode *root);
+    static inline void run(QueryNode *root);
 };
+
+void PhraseQueryEngine::do_run(QueryNode *root)
+{
+}
 
 void PhraseQueryEngine::run(QueryNode *root)
 {
-    ; /* TODO */
+    PhraseQueryEngine e;
+    e.do_run(root);
 }
 
 /* -------------------------------------------------------------------------- */
