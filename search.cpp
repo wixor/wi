@@ -453,11 +453,11 @@ static PostingsSource posrc; /* GLOBAL */
 class PostingsDecoder
 {
 public:
-    static inline void *decode_lemmatized(Reader rd, int count);
-    static inline void *decode_positional(Reader rd, int count);
+    static inline void *decodeLemmatized(Reader rd, int count);
+    static inline void *decodePositional(Reader rd, int count);
 };
 
-void* PostingsDecoder::decode_lemmatized(Reader rd, int count)
+void* PostingsDecoder::decodeLemmatized(Reader rd, int count)
 {
     assert(count > 0);
     int *ret = talloc_array(NULL, int, count);
@@ -470,7 +470,7 @@ void* PostingsDecoder::decode_lemmatized(Reader rd, int count)
 }
 
 
-void* PostingsDecoder::decode_positional(Reader rd, int count)
+void* PostingsDecoder::decodePositional(Reader rd, int count)
 {
     /* TODO */
     abort();
@@ -641,7 +641,22 @@ QueryNode *QueryParser::run(const char *query) {
 
 /* -------------------------------------------------------------------------- */
 
-static void resolve_terms(QueryNode *node, IndexType idxtype)
+class QueryEngineBase
+{
+protected:
+    void *memctx;
+    QueryNode **terms;
+    PostingsSource::ReadRq *rqs;
+    int term_count, rqs_count;
+
+    static void resolveTerms(QueryNode *node, IndexType idxtype);
+    static int countTerms(const QueryNode *node);
+    static int countNodes(const QueryNode *node);
+    static int extractTerms(QueryNode *node, QueryNode **ptr);
+    void createRqs();
+};
+
+void QueryEngineBase::resolveTerms(QueryNode *node, IndexType idxtype)
 {
     if(!node) return;
     if(node->type == QueryNode::TERM)
@@ -666,31 +681,71 @@ static void resolve_terms(QueryNode *node, IndexType idxtype)
         if(node->n_postings == 0)
             node->postings = &empty_posting_list;
     } else {
-        resolve_terms(node->lhs, idxtype);
-        resolve_terms(node->rhs, idxtype);
+        resolveTerms(node->lhs, idxtype);
+        resolveTerms(node->rhs, idxtype);
+    }
+}
+
+int QueryEngineBase::countTerms(const QueryNode *node) {
+    return !node ? 0 :
+           node->type == QueryNode::TERM ? 1 :
+           countTerms(node->lhs) + countTerms(node->rhs);
+}
+
+int QueryEngineBase::countNodes(const QueryNode *node) {
+    return !node ? 0 : 1 + countNodes(node->lhs) + countNodes(node->rhs);
+}
+
+int QueryEngineBase::extractTerms(QueryNode *node, QueryNode **ptr)
+{
+    if(!node)
+        return 0;
+    if(node->type == QueryNode::TERM) {
+        *ptr = node;
+        return 1;
+    }
+    int l = extractTerms(node->lhs, ptr);
+    int r = extractTerms(node->rhs, ptr+l);
+    return l+r;
+}
+
+void QueryEngineBase::createRqs()
+{
+    rqs_count = 0;
+    for(int i=0; i<term_count; i++)
+    {
+        if(terms[i]->postings)
+            continue;
+
+        bool dupli = false;
+        for(int j=0; j<i; j++)
+            if(terms[j]->postings_key == terms[i]->postings_key) {
+                info("term %d is duplicate of term %d\n", i,j);
+                dupli = true;
+                break;
+            }
+        if(dupli) continue;
+
+        PostingsSource::ReadRq *rq = rqs + (rqs_count++);
+        rq->postings_key = terms[i]->postings_key;
+        rq->data = talloc_size(memctx, rq->postings_key.getSize());
+        assert(rq->data);
     }
 }
 
 /* -------------------------------------------------------------------------- */
 
-class BooleanQueryEngine
+class BooleanQueryEngine : public QueryEngineBase
 {
-    void *memctx;
-    QueryNode **terms;
     QueryNode **scratchpad;
-    PostingsSource::ReadRq *rqs;
-    int term_count, node_count, stopword_count, rqs_count;
+    int node_count, stopword_count;
 
-    static int countTerms(const QueryNode *node);
-    static int countNodes(const QueryNode *node);
     static int countStopwords(const QueryNode *node);
-    static int extractTerms(QueryNode *node, QueryNode **ptr);
 
     static void linearize(QueryNode *node);
     QueryNode *optimize(QueryNode *node);
     static void fixParents(QueryNode *node);
 
-    void createRqs();
     void processPostings();
     void printResult(const QueryNode *root);
 
@@ -704,35 +759,12 @@ public:
     static inline void run(QueryNode *root);
 };
 
-int BooleanQueryEngine::countTerms(const QueryNode *node) {
-    return !node ? 0 :
-           node->type == QueryNode::TERM ? 1 :
-           countTerms(node->lhs) + countTerms(node->rhs);
-}
-
-int BooleanQueryEngine::countNodes(const QueryNode *node) {
-    return !node ? 0 : 1 + countNodes(node->lhs) + countNodes(node->rhs);
-}
-
 int BooleanQueryEngine::countStopwords(const QueryNode *node) {
     if(node->type == QueryNode::TERM)
         return dictionary.isStopWord(node->term_id);
     if(node->type == QueryNode::AND)
         return countStopwords(node->lhs) + countStopwords(node->rhs);
     return 0;
-}
-
-int BooleanQueryEngine::extractTerms(QueryNode *node, QueryNode **ptr)
-{
-    if(!node)
-        return 0;
-    if(node->type == QueryNode::TERM) {
-        *ptr = node;
-        return 1;
-    }
-    int l = extractTerms(node->lhs, ptr);
-    int r = extractTerms(node->rhs, ptr+l);
-    return l+r;
 }
 
 void BooleanQueryEngine::linearize(QueryNode *node)
@@ -888,30 +920,6 @@ void BooleanQueryEngine::fixParents(QueryNode *node)
     fixParents(node->rhs);
 }
 
-void BooleanQueryEngine::createRqs()
-{
-    rqs_count = 0;
-    for(int i=0; i<term_count; i++)
-    {
-        if(terms[i]->postings)
-            continue;
-
-        bool dupli = false;
-        for(int j=0; j<i; j++)
-            if(terms[j]->postings_key == terms[i]->postings_key) {
-                info("term %d is duplicate of term %d\n", i,j);
-                dupli = true;
-                break;
-            }
-        if(dupli) continue;
-
-        PostingsSource::ReadRq *rq = rqs + (rqs_count++);
-        rq->postings_key = terms[i]->postings_key;
-        rq->data = talloc_size(memctx, rq->postings_key.getSize());
-        assert(rq->data);
-    }
-}
-
 void BooleanQueryEngine::processPostings()
 {
     int rqs_done = 0;
@@ -924,7 +932,7 @@ void BooleanQueryEngine::processPostings()
             Dictionary::PostingsInfo info =
                 rq->postings_key.getPostingsInfo();
             void *decoded =
-                PostingsDecoder::decode_lemmatized(
+                PostingsDecoder::decodeLemmatized(
                     Reader(rq->data, info.size), info.n_postings);
             talloc_steal(memctx, decoded);
 
@@ -1033,16 +1041,16 @@ void BooleanQueryEngine::do_run(QueryNode *root)
 {
     memctx = talloc_parent(root);
 
-    resolve_terms(root, LEMMATIZED);
+    resolveTerms(root, LEMMATIZED);
     
     info("raw query:\n");
     dump_query_tree(root);
 
     node_count = countNodes(root);
-    QueryNode *_scratchpad[node_count];
-    scratchpad = _scratchpad;
-
     stopword_count = countStopwords(root);
+
+    QueryNode *_scratchpad[node_count]; scratchpad = _scratchpad;
+
     linearize(root);
     root = optimize(root);
     fixParents(root);
@@ -1051,10 +1059,9 @@ void BooleanQueryEngine::do_run(QueryNode *root)
     dump_query_tree(root);
     
     term_count = countTerms(root);
-    QueryNode *_terms[term_count];
-    PostingsSource::ReadRq _rqs[term_count];
-    terms = _terms;
-    rqs = _rqs;
+
+    QueryNode *_terms[term_count]; terms = _terms;
+    PostingsSource::ReadRq _rqs[term_count]; rqs = _rqs;
 
     extractTerms(root, terms);
     createRqs();
@@ -1070,9 +1077,15 @@ void BooleanQueryEngine::run(QueryNode *root) {
 
 /* -------------------------------------------------------------------------- */
 
-class PhraseQueryEngine
+class PhraseQueryEngine : public QueryEngineBase
 {
-    void *memctx;
+    int *offsets;
+
+    void sortTerms();
+    void processPostings();
+    void printResult();
+
+    void evaluateTerm(QueryNode *term, int offset);
 
     void do_run(QueryNode *root);
 
@@ -1080,8 +1093,80 @@ public:
     static inline void run(QueryNode *root);
 };
 
+void PhraseQueryEngine::sortTerms()
+{
+    for(int i=0; i<term_count; i++)
+        offsets[i] = i;
+
+    for(int i=0; i<term_count; i++)
+        while(i > 0 && terms[i]->estim_postings < terms[i-1]->estim_postings) {
+            std::swap(terms[i], terms[i-1]);
+            std::swap(offsets[i], offsets[i-1]);
+            i--;
+        }
+}
+
+void PhraseQueryEngine::processPostings()
+{
+    int rqs_done = 0;
+
+    while(int count = posrc.wait())
+        while(count--)
+        {
+            const PostingsSource::ReadRq *rq = rqs + (rqs_done++);
+
+            Dictionary::PostingsInfo info =
+                rq->postings_key.getPostingsInfo();
+            void *decoded =
+                PostingsDecoder::decodePositional(
+                    Reader(rq->data, info.size), info.n_postings);
+            talloc_steal(memctx, decoded);
+
+            info("processing posting list 0x%08x\n", (int)rq->postings_key);
+
+            for(int i=0; i<term_count; i++) 
+                if(terms[i]->postings_key == rq->postings_key) {
+                    terms[i]->postings = decoded;
+                    evaluateTerm(terms[i], offsets[i]);
+                }
+        }
+}
+
+void PhraseQueryEngine::printResult()
+{
+}
+
+void PhraseQueryEngine::evaluateTerm(QueryNode *term, int offset)
+{
+}
+
 void PhraseQueryEngine::do_run(QueryNode *root)
 {
+    memctx = talloc_parent(root);
+
+    resolveTerms(root, LEMMATIZED);
+    
+    info("raw query:\n");
+    dump_query_tree(root);
+
+    term_count = countTerms(root);
+
+    QueryNode *_terms[term_count]; terms = _terms;
+    PostingsSource::ReadRq _rqs[term_count]; rqs = _rqs;
+    int _offsets[term_count]; offsets = _offsets;
+
+    extractTerms(root, terms);
+    sortTerms();
+
+    if(!term_count || !terms[0]->estim_postings) {
+        printf("--- RESULTS: 0 pages\n");
+        return;
+    }
+
+    createRqs();
+    posrc.request(rqs, rqs_count);
+    processPostings();
+    printResult();
 }
 
 void PhraseQueryEngine::run(QueryNode *root)
