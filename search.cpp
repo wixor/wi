@@ -1275,14 +1275,12 @@ void PhraseQueryEngine::do_run(QueryNode *root)
     extractTerms(root, terms);
     sortTerms();
 
-    if(!term_count || !terms[0]->estim_postings) {
-        printf("--- RESULTS: 0 pages\n");
-        return;
+    if(term_count && terms[0]->postings_key.getNPostings()) {
+        createRqs();
+        posrc.request(rqs, rqs_count);
+        processPostings();
     }
 
-    createRqs();
-    posrc.request(rqs, rqs_count);
-    processPostings();
     printResult();
 }
 
