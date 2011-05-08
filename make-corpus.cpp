@@ -129,6 +129,7 @@ int main(int argc, char *argv[])
     for(int i=0,p=0; i<th.buckets(); i++) {
         int q = p;
         while(p<(int)result.size() && result[p].hash == i) p++;
+        assert(p-q < 256);
         wr.write_u8(p-q);
     }
 
@@ -141,7 +142,7 @@ int main(int argc, char *argv[])
         wr.write_raw(result[i].data, result[i].length());
 
     printf("flushing\n");
-    FileIO fio("corpus", O_WRONLY|O_CREAT|O_TRUNC);
+    FileIO fio("db/corpus", O_WRONLY|O_CREAT|O_TRUNC);
     fio.write_raw(wr.buffer(), wr.tell());
 
     return 0;

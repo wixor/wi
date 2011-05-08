@@ -9,13 +9,13 @@
 
 int main(int argc, char *argv[])
 {
-    if(argc != 3) {
-        fprintf(stderr, "dedigitize [corpus] [digitize output]\n");
+    if(argc != 2) {
+        fprintf(stderr, "dedigitize [digitize output]\n");
         return 1;
     }
 
-    Corpus corp(argv[1]);
-    FileMapping fmap(argv[2]);
+    Corpus corp("db/corpus");
+    FileMapping fmap(argv[1]);
     const uint64_t *p   = (const uint64_t *)fmap.data(),
                    *end = (const uint64_t *)fmap.end();
     while(p < end)

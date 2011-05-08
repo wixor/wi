@@ -42,31 +42,24 @@ static void run_line(const char *p, const char *end, const Corpus &corp)
 
 int main(int argc, char *argv[])
 {
-    if(argc != 2) {
-        fprintf(stderr, "digitize [corpus file] < [text file] > [output]\n");
-        return 1;
-    }
-
-    Corpus corp(argv[1]);
+    Corpus corp("db/corpus");
     int total_terms = 0;
 
     for(;;)
     {
-        static char buf[1048576];
+        static char buf[16*1048576];
         const char *end;
         
-        if(fgets(buf, sizeof(buf)-1, stdin) == NULL) break;
-        end = strchr(buf, '\n');
-        run_line(buf, end, corp);
-        
-        assert(fgets(buf, sizeof(buf)-1, stdin) == buf);
+        fprintf(stderr, "processed articles: %d, total terms: %d\r", doc_id, total_terms);
+        if(fgets(buf, sizeof(buf)-1, stdin) != buf)
+            break;
+
         end = strchr(buf, '\n');
         run_line(buf, end, corp);
 
         total_terms += term_pos;
         doc_id++;
         term_pos = 0;
-        fprintf(stderr, "processed articles: %d, total terms: %d\r", doc_id, total_terms);
     }
     fprintf(stderr, "\n");
     return 0;
