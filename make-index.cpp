@@ -20,35 +20,40 @@ struct term {
     bool empty;
 };
 
+static void seek_until(int id, Reader *rd)
+{
+    while(!rd->eof())
+    {
+        size_t save = rd->tell();
+        uint64_t e = rd->read_u64();
+
+        int term_id = e >> 39;
+        if(term_id < id)
+            continue;
+        rd->seek(save);
+        break;
+    }
+}
+
 /* term id: 25 bits -- up to 32 mln terms (real: ??)
  * document id: 20 bits -- up to 1 mln documents (real: 800 k)
  * offset in document: 19 bits -- up to .5 mln terms/document (real max: 50 k)
  */
 static bool write_lemmatized(struct term *term, Reader *rd, const FileIO &fio)
 {
-    while(!rd->eof())
-    {
-        size_t pos = rd->tell();
-        uint64_t e = rd->read_u64();
-
-        int term_id = e >> 39;
-        if(term_id < term->id)
-            continue;
-        rd->seek(pos);
-        break;
-    }
+    seek_until(term->id, rd);
 
     Writer wr;
 
     int last_doc_id = -1, n_entries = 0;
     while(!rd->eof())
     {
-        size_t pos = rd->tell();
+        size_t save = rd->tell();
         uint64_t e = rd->read_u64();
 
         int term_id = e >> 39;
         if(term_id > term->id) {
-            rd->seek(pos);
+            rd->seek(save);
             break;
         }
 
@@ -75,11 +80,72 @@ static bool write_lemmatized(struct term *term, Reader *rd, const FileIO &fio)
     }
 }
 
-static bool write_positional(struct term *term, Reader *rd, const FileIO &wr)
+static bool write_positional(struct term *term, Reader *rd, const FileIO &fio)
 {
-    term->positional.n_entries = 0;
-    term->positional.length = 0;
-    return false;
+    seek_until(term->id, rd);
+
+    Writer docswr, poswr;
+    docswr.write_u32(0);
+
+    int last_doc_id = -1, last_pos = 0, pos_start = 0, n_entries = 0;
+    while(!rd->eof())
+    {
+        size_t save = rd->tell();
+        uint64_t e = rd->read_u64();
+
+        int term_id = e >> 39;
+        if(term_id > term->id) {
+            rd->seek(save);
+            break;
+        }
+
+        int doc_id = (e>>19)  & 0xfffff;
+        int pos = e & 0x7ffff;
+
+        if(doc_id == last_doc_id) {
+            poswr.write_uv(pos - last_pos);
+            last_pos = pos;
+            continue;
+        }
+
+        if(last_doc_id == -1) { 
+            docswr.write_u24(doc_id);
+            pos_start = poswr.tell();
+            poswr.write_uv(pos);
+            last_pos = pos;
+        }
+        else {
+            docswr.write_uv(poswr.tell() - pos_start);
+            docswr.write_uv(doc_id - last_doc_id);
+            pos_start = poswr.tell();
+            poswr.write_uv(pos);
+            last_pos = pos;
+        }
+
+        last_doc_id = doc_id;
+        n_entries++;
+    }
+    if(last_doc_id != -1) 
+        docswr.write_uv(poswr.tell() - pos_start);
+    *(uint32_t *)docswr.buffer() = docswr.tell() - 4;
+
+    if(!n_entries) {
+        term->positional.n_entries = 0;
+        term->positional.length = 0;
+        talloc_free(docswr.buffer());
+        talloc_free(poswr.buffer());
+        return false;
+    }
+
+    term->positional.n_entries = n_entries;
+    term->positional.length = docswr.tell() + poswr.tell();
+
+    fio.write_raw(docswr.buffer(), docswr.tell());
+    fio.write_raw(poswr.buffer(), poswr.tell());
+
+    talloc_free(docswr.buffer());
+    talloc_free(poswr.buffer());
+    return true;
 }
 
 int main(void)
