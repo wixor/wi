@@ -12,8 +12,8 @@ extern "C" {
 
 /* -------------------------------------------------------------------------- */
 
-//#define info(fmt, ...) printf(fmt, ## __VA_ARGS__)
-#define info(fmt, ...)
+#define info(fmt, ...) printf(fmt, ## __VA_ARGS__)
+//#define info(fmt, ...)
 struct QueryNode;
 static void dump_query_tree(const QueryNode *node, int indent = 0);
 

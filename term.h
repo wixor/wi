@@ -8,7 +8,7 @@
  * TermReader: read a stream of terms from memory buffer
  *
  * TermReader is a built upon Reader and allows extraction of consecutive terms
- * from given memory buffer. Some of underying Reader's API is exposed.
+ * from given memory buffer. Some of underlying Reader's API is exposed.
  * Also requirements for buffer are those of Reader.
  *
  * This facility is used for query parsing, so some characters are considered
@@ -18,13 +18,13 @@
  * API summary:
  * - attach, seek, tell, eof, read_utf8: as in Reader
  * - eatSymbol: read given symbol from stream, possibly preceded with some
- *      whitespace. if symbol is not found, do nothing (stream position is
+ *      whitespace. If symbol is not found, do nothing (stream position is
  *      not changed)
  * - eatWhitespace: read all whitespace from stream up to first other symbol.
  *      returns number of symbols read.
  * - readTerm: read one term, possibly preceded with some whitespace, create
- *      its copy and return it. stream position is placed just after last
- *      symbol read. memory for copy is allocated with talloc.
+ *      its copy and return it. Stream position is placed just after last
+ *      symbol read. Memory for copy is allocated with talloc.
  */
 class TermReader
 {
