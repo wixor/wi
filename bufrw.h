@@ -69,6 +69,7 @@ public:
     inline void write_u16(uint16_t v) { v = htole16(v); write_raw(&v, sizeof(v)); }
     inline void write_u24(uint32_t v) { write_u8(v); write_u16(v>>8); }
     inline void write_u32(uint32_t v) { v = htole32(v); write_raw(&v, sizeof(v)); }
+    inline void write_u64(uint64_t v) { v = htole64(v); write_raw(&v, sizeof(v)); }
 
     void write_uv(uint32_t v);
     void write_utf8(int v);
@@ -163,6 +164,7 @@ public:
     inline uint32_t read_u16() { uint16_t ret; read_raw(&ret, sizeof(ret)); return le16toh(ret); }
     inline uint32_t read_u24() { return read_u8() | (read_u16() << 8); }
     inline uint32_t read_u32() { uint32_t ret; read_raw(&ret, sizeof(ret)); return le32toh(ret); }
+    inline uint64_t read_u64() { uint64_t ret; read_raw(&ret, sizeof(ret)); return le64toh(ret); }
 
     uint32_t read_uv();
     int read_utf8();

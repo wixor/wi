@@ -1062,14 +1062,13 @@ void BooleanQueryEngine::run(QueryNode *root) {
 
 class PhraseQueryEngine : public QueryEngineBase
 {
-    int *offsets;
-
     struct doc {
         int doc_id, positions_offs;
     };
 
     typedef unsigned short pos_t;
     
+    int *offsets;
     struct doc *docs, *docs_rdptr, *docs_wrptr, *docs_end;
     pos_t *positions, *positions_wrptr;
 

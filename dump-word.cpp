@@ -167,8 +167,8 @@ Dictionary::Info Dictionary::lookup(const char *text, size_t len) const
         info.positional.n_postings = positional[idx].n_postings;
         info.lemmatized.id = terms[idx].lemmatized_list_id;
         info.lemmatized.length = lemmatized[info.lemmatized.id+1].offset - lemmatized[info.lemmatized.id].offset;
-        info.lemmatized.offset = lemmatized[idx].offset;
-        info.lemmatized.n_postings = lemmatized[idx].n_postings;
+        info.lemmatized.offset = lemmatized[info.lemmatized.id].offset;
+        info.lemmatized.n_postings = lemmatized[info.lemmatized.id].n_postings;
         info.bucket = h;
         info.stop = terms[idx].stop;
         return info;
@@ -193,7 +193,7 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        printf("word »%s«: id %d, bucket%d%s\n", argv[i], info.positional.id, info.bucket, info.stop ? ", stopword" : "");
+        printf("word »%s«: id %d, bucket %d%s\n", argv[i], info.positional.id, info.bucket, info.stop ? ", stopword" : "");
 
         printf("  lemmatized list: id %d, length %d, offset %d, postings %d\n",
                 info.lemmatized.id, info.lemmatized.length, info.lemmatized.offset, info.lemmatized.n_postings);
