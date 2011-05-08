@@ -52,8 +52,8 @@ int main(int argc, char *argv[])
             int base_id = corp.lookup(p, q-p);
             assert(base_id != -1);
             if(base_id == trm.term_id) {
-                fprintf(stderr, "warning: i'm my own base, id %d, word '%.*s'\n",
-                        base_id, q-p, p);
+                //fprintf(stderr, "warning: i'm my own base, id %d, word '%.*s'\n",
+                //        base_id, q-p, p);
                 continue;
             }
 
