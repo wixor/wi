@@ -217,7 +217,7 @@ int main(int argc, char *argv[])
             printf("    docs description length: %d bytes\n", ddl);
 
             int doc_id = rd.read_u24(), pl = rd.read_uv();
-            for(int i=0; i<info.positional.length; i++)
+            for(int i=0; i<info.positional.n_postings; i++)
             {
                 printf("    %d (positions: %d bytes):", doc_id, pl);
                 Reader prd((const char *)rd.buffer() + 4+ddl, pl);
@@ -231,6 +231,7 @@ int main(int argc, char *argv[])
                     doc_id += rd.read_uv();
                     pl = rd.read_uv();
                 }
+                printf("\n");
             }
         }
     }

@@ -652,16 +652,17 @@ void QueryEngineBase::resolveTerms(QueryNode *node, IndexType idxtype)
 
         if(node->n_postings == 0)
             node->postings = &empty_posting_list;
-    } else {
-        resolveTerms(node->lhs, idxtype);
-        resolveTerms(node->rhs, idxtype);
-    }
+    } 
+    resolveTerms(node->lhs, idxtype);
+    resolveTerms(node->rhs, idxtype);
 }
 
 int QueryEngineBase::countTerms(const QueryNode *node) {
-    return !node ? 0 :
-           node->type == QueryNode::TERM ? 1 :
-           countTerms(node->lhs) + countTerms(node->rhs);
+    if(node)
+        return (node->type == QueryNode::TERM) +
+               countTerms(node->lhs) + countTerms(node->rhs);
+    else
+        return 0;
 }
 
 int QueryEngineBase::countNodes(const QueryNode *node) {
@@ -672,13 +673,11 @@ int QueryEngineBase::extractTerms(QueryNode *node, QueryNode **ptr)
 {
     if(!node)
         return 0;
-    if(node->type == QueryNode::TERM) {
-        *ptr = node;
-        return 1;
-    }
+    if(node->type == QueryNode::TERM)
+        *ptr++ = node;
     int l = extractTerms(node->lhs, ptr);
     int r = extractTerms(node->rhs, ptr+l);
-    return l+r;
+    return (node->type == QueryNode::TERM)+l+r;
 }
 
 void QueryEngineBase::createRqs()
@@ -1091,10 +1090,9 @@ void PhraseQueryEngine::sortTerms()
         offsets[i] = term_count-1-i;
 
     for(int i=0; i<term_count; i++)
-        while(i > 0 && terms[i]->estim_postings < terms[i-1]->estim_postings) {
-            std::swap(terms[i], terms[i-1]);
-            std::swap(offsets[i], offsets[i-1]);
-            i--;
+        for(int j=i; j > 0 && terms[j]->n_postings < terms[j-1]->n_postings; j--) {
+            std::swap(terms[j], terms[j-1]);
+            std::swap(offsets[j], offsets[j-1]);
         }
 }
 
@@ -1201,9 +1199,10 @@ void PhraseQueryEngine::makeWorkingSet(Reader rd, int n_postings, int offset)
     /* find out where positions start */
     int positions_offset = 4 + rd.read_u32();
 
+    int foo = rd.size() - positions_offset + n_postings;
     /* allocate memory (positions may be bigger than necessary) */
     docs = talloc_array(memctx, struct doc, n_postings);
-    positions = talloc_array(memctx, pos_t, rd.size() - positions_offset);
+    positions = talloc_array(memctx, pos_t, rd.size() - positions_offset + n_postings);
     assert(docs && positions);
 
     /* set up writing fingers */
@@ -1242,6 +1241,8 @@ void PhraseQueryEngine::makeWorkingSet(Reader rd, int n_postings, int offset)
         }
     }
 
+    assert(positions_wrptr-positions <= foo);
+
     /* remember how many documents we have */
     docs_end = docs_wrptr;
 }
@@ -1260,7 +1261,7 @@ void PhraseQueryEngine::do_run(QueryNode *root)
     docs = docs_rdptr = docs_wrptr = docs_end = NULL;
     positions = positions_wrptr = NULL;
 
-    resolveTerms(root, LEMMATIZED);
+    resolveTerms(root, POSITIONAL);
     
     info("raw query:\n");
     dump_query_tree(root);
