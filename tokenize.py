@@ -7,48 +7,53 @@
 import sys, os, codecs
 from struct import pack
 import re
+import string
 
-def parse(filename):
-	"""Parsing given text,\nTitles starts with tag: "##TITLE## "."""
+def tokenize(filename):
+	"""Tokenizing given text,\nTitles starts with tag: "##TITLE## "."""
 
 	dummy_word = '"'
-	match_title = re.compile(ur"^##TITLE## (.*)$", flags=re.UNICODE)
-	not_polish_word = re.compile(ur"[^-\.a-ząęśćżźńół0-9]", flags=re.UNICODE)
+	title_pattern = re.compile(r"^##TITLE## (.*)$")
+	diacritics = r"ąęśćżźńółèüäéáúūōíñõ"# ąęśćżźńółÀ-öø-ÿĀ-ſ
+	unwanted_char = re.compile(r"[^- a-z0-9{0}_.']".format(diacritics))
+	symbols = r"""[,'"!?:;@#$%^&*()+=[\]{}\|<>/]"""
+	unwanted_symbols = re.compile(r"(?:{0})|(?:\B[-.']\B)|(?:(?<=\d)[-'.](?=\d))|(?:\B[-.']\b)|(?:\b[-.']\B)".format(symbols))
+	parenthesis = re.compile(r"[()]")
+	spaces = re.compile(r"\s+")
+	only_spaces = re.compile(r"^\s+$")
+	#lower = string.maketrans(r"ABCDEFGHIJKLMNOPQRSTUVWXYZĄĘŚĆŻŹŃÓŁÈÜÄÉÁÚŪŌÍÑÕ", r"abcdefghijklmnopqrstuvwxyząęśćżźńółèüäéáúūōíñõ")
 
 	tytuly_count = 0
-	line_count = 0
 	### reading and parsing file ###
-	with codecs.open(filename, 'r', encoding='utf-8', buffering=2**25) as f_SRC:
-	 with codecs.open('TITL-'+os.path.basename(filename), 'w', encoding='utf-8', buffering=2**25) as f_TITL:
-	  with codecs.open('TOKENS-'+os.path.basename(filename), 'w', encoding='utf-8', buffering=2**25) as f_TOKENS:
+	with open(filename, 'r', buffering=2**27) as f_SRC:
+	 with open('TITL-'+os.path.basename(filename), 'w', buffering=2**25) as f_TITL:
+	  with open('TOKENS-'+os.path.basename(filename), 'w', buffering=2**25) as f_TOKENS:
 		f_TITL.write('TITL')
 		f_TITL.seek(4, 1)
-
+		i = 0
 		for line in f_SRC:
-			title = match_title.match(line)
+			title = title_pattern.match(line)
 			if title:
 				if tytuly_count != 0:
 					f_TOKENS.write('\n')
 				tytuly_count += 1
-				tytul = title.group(1).strip().lower()
+				tytul = title.group(1).strip()
 				f_TITL.write(tytul + "\x00")
+				#tytul = tytul.translate(lower)
+				tytul = tytul.decode('utf8').lower().encode('utf8')
+				tytul = re.sub(parenthesis, r"", tytul)
 				f_TOKENS.write(' '.join((tytul, dummy_word)))
 			else:
-				# removing all characters different than '.', '-', letters and digits
-				line = re.sub(ur"([^-.\w\d]+)", ur" ", line, flags=re.UNICODE)
-				# preserving words with dash and middle dots of multi-word abbreviations like 'e.g', 'p.n.e'
-				line = re.sub(ur"(?:\s-\s)|(?:\.(?:\s|$))", ur" ", line, flags=re.UNICODE)
-				# striping and converting to lowercase
-				line = line.strip().lower()
-				# tokenizing by spliting received line
-				tokens = re.split(ur"\s+", line, flags=re.UNICODE)
-				for token in tokens:
-					if token != u'':
-						if not_polish_word.search(token):
+				#line = line.translate(lower)
+				line = line.decode('utf8').lower().encode('utf8')
+				line = re.sub(unwanted_symbols, r" ", line)
+				if not re.match(only_spaces, line):
+					tokens = re.split(spaces, line.strip())
+					for token in tokens:
+						if unwanted_char.search(token):
 							f_TOKENS.write(' ' + dummy_word)
 						else:
 							f_TOKENS.write(' ' + token)
-			line_count += 1
 		f_TOKENS.write('\n')
 
 	 with open('TITL-'+os.path.basename(filename), 'rb+') as f_TITL:
@@ -60,7 +65,7 @@ def main():
 		print 'usage: ./tokenize.py wiki_src'
 		exit(1)
 
-	parse(sys.argv[1])
+	tokenize(sys.argv[1])
 
 
 if __name__ == "__main__":
