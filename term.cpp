@@ -1,6 +1,7 @@
 extern "C" {
-#include <talloc.h>
+	#include <talloc.h>
 }
+#include <algorithm> /* for upper_bound */
 #include "bufrw.h"
 #include "term.h"
 
