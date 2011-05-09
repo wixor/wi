@@ -355,6 +355,9 @@ void PostingsSource::threadFunc()
         uint64_t foo;
         eventfd_read(evfd_rq, &foo);
 
+        int rqs_count = *(volatile int *)&this->rqs_count;
+        PostingsSource::ReadRq *rqs = *(PostingsSource::ReadRq * volatile *)&this->rqs;
+
         for(int i=0; i<rqs_count; i++)
         {
             IndexType idxtype = 
@@ -1338,7 +1341,7 @@ static void run_query(const char *query)
 
     talloc_free(talloc_parent(root));
 
-    printf("--- total time: %.3lf seconds\n", timer.end());
+    printf("--- total time: %.3lf miliseconds\n", timer.end()*1000.f);
 }
 
 int main(void)
