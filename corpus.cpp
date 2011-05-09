@@ -53,6 +53,8 @@ void Corpus::read(const char *filename)
     rd.read_raw(all_terms, (long)terms[term_count]);
     for(int i=0; i<=term_count; i++)
         terms[i] = all_terms + (long)terms[i];
+
+    assert(rd.eof());
 }
 
 int Corpus::lookup(const char *text, size_t len) const

@@ -1,79 +1,56 @@
+#include <stdlib.h>
+#include <string.h>
 #include <assert.h>
-#include <vector>
-#include <algorithm>
 
-#include "likely.h"
 #include "bufrw.h"
 #include "fileio.h"
 #include "term.h"
 
-struct word {
-    int hash;
-    const char *data;
-
-    inline int cmp(const word &w) const
-    {
-        if(likely(hash != w.hash))
-            return hash - w.hash;
-        for(int i=0;;i++) {
-            if(data[i] != w.data[i])
-                return data[i] - w.data[i];
-            if(unlikely(data[i] == ' ' || data[i] == '\n'))
-                return 0;
-        }
-    }
-
-    inline bool operator<(const word &w) const {
-        return cmp(w) < 0;
-    }
-    inline bool operator==(const word &w) const {
-        return cmp(w) == 0;
-    }
-
-    inline int length() const {
-        for(int i=0; ; i++)
-            if(data[i] == ' ' || data[i] == '\n')
-                return i;
-    }
+const int max_bucket_size = 13;
+struct term {
+    int offset, length;
 };
-
 static TermHasher th;
-static std::vector<word> words, result;
-static int uniqness_tolerance = 1000000;
+static term *hashtable;
+static char *texts;
+static int texts_used, texts_alloc;
+static int total_term_count;
 
-static void lost_uniqness()
+static void insert_word(const char *start, const char *end)
 {
-    if(--uniqness_tolerance > 0)
+    size_t length = end-start;
+    int hash = th(start, length);
+
+    if(length >= 128) {
+        fprintf(stderr, "WARNING: term too long (%d >= 128): '%.*s', skipping\n", (int)length, (int)length, start);
         return;
-    uniqness_tolerance = 1000000;
-
-    printf("sorting\n");
-    std::sort(words.begin(), words.end());
-
-    printf("merging\n");
-    std::vector<word> v;
-    v.reserve(words.size() + result.size());
-
-    unsigned int i=0, j=0;
-    while(i < result.size() && j < words.size())
-    {
-        while(j+1 < words.size() && words[j] == words[j+1]) j++;
-
-        int c = result[i].cmp(words[j]);
-
-        v.push_back(c < 0 ? result[i] : words[j]);
-
-        if(c <= 0) i++;
-        if(c >= 0) j++;
-    }
-    while(i < result.size()) v.push_back(result[i++]);
-    while(j < words.size()) {
-        while(j+1 < words.size() && words[j] == words[j+1]) j++;
-        v.push_back(words[j++]);
     }
 
-    words.clear();
-    std::swap(v, result);
+    int pos = hash*max_bucket_size;
+    while(pos < (hash+1)*max_bucket_size)
+        if(hashtable[pos].length == 0)
+            break;
+        else if(hashtable[pos].length == length &&
+                memcmp(texts+hashtable[pos].offset, start, length) == 0)
+            return;
+        else
+            pos++;
+    assert(hashtable[pos].length == 0);
+
+    hashtable[pos].offset = texts_used;
+    hashtable[pos].length = length;
+
+    if(texts_used + length >= texts_alloc) {
+        while(texts_used + length >= texts_alloc)
+            texts_alloc *= 2;
+        texts = (char *)realloc(texts, texts_alloc);
+        printf("reallocating texts to %d megabytes\n", texts_alloc>>20);
+        assert(texts);
+    }
+
+    memcpy(texts + texts_used, start, length);
+    texts_used += length;
+    total_term_count++;
 }
 
 static void add_words(const char *start, const char *end)
@@ -83,13 +60,8 @@ static void add_words(const char *start, const char *end)
         while(start < end && (*start == ' ' || *start == '\n')) start++;
         const char *p = start;
         while(start < end && *start != ' ' && *start != '\n') start++;
-        if(start - p > 0) {
-            word w;
-            w.hash = th(p, start-p);
-            w.data = p;
-            words.push_back(w);
-            lost_uniqness();
-        }
+        if(start - p > 0) 
+            insert_word(p,  start);
     }
 }
 
@@ -97,26 +69,19 @@ int main(int argc, char *argv[])
 {
     th.a = 123456337;
     th.b = 203451187;
-    th.n = 1000033;
+    th.n = 3984301;
 
-    FileMapping maps[argc-1];
+    hashtable = (term *)calloc(th.n * max_bucket_size, sizeof(term));
+    texts_alloc = 8*1048576; texts_used = 0;
+    texts = (char *)malloc(texts_alloc);
 
-    for(int i=1; i<argc; i++)
-        maps[i-1].attach(argv[i]);
-
-    for(int i=0; i<argc-1; i++) {
-        printf("reading file %d\n", i+1);
-        add_words((const char *)maps[i].data(),
-                  (const char *)maps[i].end());
+    for(int i=1; i<argc; i++) {
+        printf("reading file %d\n", i);
+        FileMapping map(argv[i]);
+        add_words((const char *)map.data(),
+                  (const char *)map.end());
     }
    
-    uniqness_tolerance = 0;
-    lost_uniqness();
-
-    printf("distinct words: %d\n", (int)result.size());
-    for(int i=1; i<(int)result.size(); i++)
-        assert(result[i-1] < result[i]);
-
     Writer wr;
 
     printf("writing header\n");
@@ -126,20 +91,25 @@ int main(int argc, char *argv[])
     wr.write_u32(th.n);
 
     printf("writing bucket sizes\n");
-    for(int i=0,p=0; i<th.buckets(); i++) {
-        int q = p;
-        while(p<(int)result.size() && result[p].hash == i) p++;
-        assert(p-q < 256);
-        wr.write_u8(p-q);
+    int max_occ = 0;
+    for(int i=0; i<th.n; i++) {
+        int size = 0;
+        while(size < max_bucket_size && hashtable[i*max_bucket_size + size].length)
+            size++;
+        if(size > max_occ) max_occ = size;
+        wr.write_u8(size);
     }
+    printf("max occupancy: %d, term count: %d\n", max_occ, total_term_count);
 
     printf("writing word lengths\n");
-    for(int i=0; i<(int)result.size(); i++)
-        wr.write_u8(result[i].length());
+    for(int i=0; i<th.n*max_bucket_size; i++)
+        if(hashtable[i].length) 
+            wr.write_u8(hashtable[i].length);
 
     printf("writing result\n");
-    for(int i=0; i<(int)result.size(); i++)
-        wr.write_raw(result[i].data, result[i].length());
+    for(int i=0; i<th.n*max_bucket_size; i++)
+        if(hashtable[i].length) 
+            wr.write_raw(texts+hashtable[i].offset, hashtable[i].length);
 
     printf("flushing\n");
     FileIO fio("db/corpus", O_WRONLY|O_CREAT|O_TRUNC);

@@ -18,12 +18,12 @@ step "building mosquare"
 ./make-mosquare
 step "digitizing wiki"
 ./digitize < $WIKI > db/digital
-step "lemmatizing wiki"
-./lemmatize < db/digital > db/dilemma
 step "inverting wiki"
-./invert db/digital && mv db/digital db/inverted
+./invert db/digital > db/inverted && rm db/digital
+step "lemmatizing wiki"
+./lemmatize < db/inverted > db/dilemma
 step "inverting lemmatized wiki"
-./invert db/dilemma && mv db/dilemma db/invlemma
+./invert db/dilemma > db/invlemma && rm db/dilemma
 step "building index"
 ./make-index
 

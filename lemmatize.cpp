@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
 #include "fileio.h"
@@ -28,22 +29,28 @@ int main(void)
         offs[i] = o;
     }
 
-    static uint64_t buffer[1048576*16];
-    int n_read = fread(buffer, sizeof(uint64_t), 1048576*16, stdin);
-    for(int i=0; i<n_read; i++)
-    {
-        uint64_t x = buffer[i];
-        int term_id = x >> 39;
-        assert(term_id < n_words);
-        rd.seek(offs[term_id]);
+    setvbuf(stdout, (char *)malloc(1048576*16), _IOFBF, 1048576*16);
 
-        int t = rd.read_u32();
-        assert((t & 0xffffff) == term_id);
-        int n_edges = t>>24;
-        while(n_edges--) {
-            int edge = rd.read_u32();
-            uint64_t y = (x & 0x7fffffffffLL) | ((uint64_t)edge << 39);
-            fwrite_unlocked(&y, sizeof(uint64_t), 1, stdout);
+    for(;;) {
+        static uint64_t buffer[1048576*2];
+        int n_read = fread(buffer, sizeof(uint64_t), 1048576*2, stdin);
+        if(n_read == 0) break;
+        for(int i=0; i<n_read; i++)
+        {
+            uint64_t x = buffer[i];
+            int term_id = x >> 39;
+            assert(term_id < n_words);
+            rd.seek(offs[term_id]);
+
+            int t = rd.read_u32();
+            assert((t & 0xffffff) == term_id);
+            int n_edges = t>>24;
+            assert(n_edges > 0);
+            while(n_edges--) {
+                int edge = rd.read_u32();
+                uint64_t y = (x & 0x7fffffffffLL) | ((uint64_t)edge << 39);
+                fwrite_unlocked(&y, sizeof(uint64_t), 1, stdout);
+            }
         }
     }
 

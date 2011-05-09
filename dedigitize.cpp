@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
         int term_off = (x >> 0)  & ((1<<19) - 1),
             doc_id   = (x >> 19) & ((1<<20) - 1),
             term_id  = (x >> 39) & ((1<<25) - 1);
-        char term_text[64];
+        char term_text[256+16];
         corp.lookup(term_id, term_text, sizeof(term_text));
         printf("term '%s', id %d, doc %d, offs %d\n", term_text, term_id, doc_id, term_off);
     }
