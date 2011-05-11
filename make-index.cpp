@@ -72,10 +72,10 @@ static bool write_lemmatized(struct term *term, Reader *rd, const FileIO &fio)
     term->lemmatized.length = wr.tell();
     if(n_entries) {
         fio.write_raw(wr.buffer(), wr.tell());
-        talloc_free(wr.buffer());
+        wr.free();
         return true;
     } else {
-        talloc_free(wr.buffer());
+        wr.free();
         return false;
     }
 }
@@ -132,8 +132,8 @@ static bool write_positional(struct term *term, Reader *rd, const FileIO &fio)
     if(!n_entries) {
         term->positional.n_entries = 0;
         term->positional.length = 0;
-        talloc_free(docswr.buffer());
-        talloc_free(poswr.buffer());
+        docswr.free();
+        poswr.free();
         return false;
     }
 
@@ -142,9 +142,9 @@ static bool write_positional(struct term *term, Reader *rd, const FileIO &fio)
 
     fio.write_raw(docswr.buffer(), docswr.tell());
     fio.write_raw(poswr.buffer(), poswr.tell());
-
-    talloc_free(docswr.buffer());
-    talloc_free(poswr.buffer());
+    
+    docswr.free();
+    poswr.free();
     return true;
 }
 
