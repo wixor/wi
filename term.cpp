@@ -1,26 +1,20 @@
 extern "C" {
 	#include <talloc.h>
 }
-#include <algorithm> /* for upper_bound */
 #include "bufrw.h"
 #include "term.h"
 
-bool TermReader::isQuerySymbol(int c) {
-    return c == '|' || c == ')' || c == '(' || c == '"';
-}
 bool TermReader::isWhitespace(int c) 
 {
-    static const char stopchars[] =
-        " \n\t\r`~!@#$%^&*_=+\\[]{};':,./<>?";
-    for(const char *p = stopchars; *p; p++)
-        if(c == *p)
-            return true;
-    if(c >= 0x2000 && c <= 0x206F) /* unicode: general punctuation */
-        return true;
-    return false;
+    if(c >= 'a' && c <= 'z') return false;
+    if(c >= 'A' && c <= 'Z') return false;
+    if(c >= 0xC0 && c <= 0x17E) return false;
+    if(c == '|' || c == '(' || c == ')' || c == '"') return false;
+    return true;
 }
 bool TermReader::isTermSeparator(int c) {
-    return isWhitespace(c) || isQuerySymbol(c);
+    return (c != '_' && c != '-' && isWhitespace(c)) ||
+           (c == '|' || c == '(' || c == ')' || c == '"');
 }
 
 int TermReader::lowercase(int c) {
@@ -95,6 +89,7 @@ char *TermReader::readTerm()
         return NULL;
     }
 
+    wr.write_u8(0);
     return (char *)wr.buffer();
 }
 

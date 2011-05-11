@@ -26,7 +26,6 @@ class TermReader
 {
     Reader rd;
 
-    static inline bool isQuerySymbol(int c);
     static inline bool isWhitespace(int c);
     static inline bool isTermSeparator(int c);
     static inline int lowercase(int c);
