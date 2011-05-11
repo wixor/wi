@@ -1347,7 +1347,8 @@ static void print_usage(void) {
 int main(int argc, char *argv[])
 {
     while(int opt = getopt(argc, argv, "vrh"))
-        switch(opt) {
+        if(opt == -1) break;
+        else switch(opt) {
             case 'v': verbose = true; break;
             case 'r': noResults = true; break;
             case 'h':
