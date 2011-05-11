@@ -6,6 +6,7 @@ extern "C" {
 
 bool TermReader::isWhitespace(int c) 
 {
+    if(c >= '0' && c <= '9') return false;
     if(c >= 'a' && c <= 'z') return false;
     if(c >= 'A' && c <= 'Z') return false;
     if(c >= 0xC0 && c <= 0x17E) return false;
