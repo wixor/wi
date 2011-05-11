@@ -14,7 +14,7 @@ extern "C" {
 /* -------------------------------------------------------------------------- */
 
 static char queryText[1024];
-static bool verbose, Results;
+static bool verbose, noResults;
 #define info(fmt, ...) \
     do { if(unlikely(verbose)) printf(fmt, ## __VA_ARGS__); } while (0)
 
@@ -1245,7 +1245,6 @@ void PhraseQueryEngine::makeWorkingSet(Reader rd, int n_postings, int offset)
     /* find out where positions start */
     int positions_offset = 4 + rd.read_u32();
 
-    int foo = rd.size() - positions_offset + n_postings;
     /* allocate memory (positions may be bigger than necessary) */
     docs = talloc_array(memctx, struct doc, n_postings);
     positions = talloc_array(memctx, pos_t, rd.size() - positions_offset + n_postings);
@@ -1286,8 +1285,6 @@ void PhraseQueryEngine::makeWorkingSet(Reader rd, int n_postings, int offset)
             positions_size = rd.read_uv();
         }
     }
-
-    assert(positions_wrptr-positions <= foo);
 
     /* remember how many documents we have */
     docs_end = docs_wrptr;
