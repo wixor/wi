@@ -45,6 +45,8 @@ public:
     /* create Writer; 'len' is initial buffer size */
     Writer(size_t len=128) : buf(NULL), ptr(NULL), end(NULL) { grow(len); }
 
+    void free();
+
     inline const void* buffer() const { return buf; }
     inline void* buffer() { return buf; }
     inline size_t tell() const { return ptr - buf; }

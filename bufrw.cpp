@@ -23,6 +23,12 @@ void Writer::grow(size_t need)
     ptr = end - left;
 }
 
+void Writer::free()
+{
+    talloc_free(buf);
+    buf = ptr = end = NULL;
+}
+
 void Writer::write_uv(uint32_t v)
 {
     if(v >= 0x10000000)
