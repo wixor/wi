@@ -1,6 +1,6 @@
 CC := gcc
 CXX := g++
-CPPFLAGS := -D_FILE_OFFSET_BITS=64
+CPPFLAGS := -D_FILE_OFFSET_BITS=64 -DNDEBUG
 CXXFLAGS := -O3 -g -pthread -march=native -Wall
 LDFLAGS := -pthread -ltalloc -lrt -lstdc++
 

@@ -61,13 +61,10 @@ char *TermReader::readTerm()
 {
     eatWhitespace();
 
-    size_t start = tell(), end = start;
-    while(!eof()) {
+    size_t start = tell(), end;
+    do 
         end = tell();
-        int c = read_utf8();
-        if(isTermSeparator(c))
-            break;
-    }
+    while(!eof() && !isTermSeparator(read_utf8()));
     seek(end);
 
     if(start == end)
