@@ -1,4 +1,5 @@
 #include <time.h>
+#include <getopt.h>
 #include <pthread.h>
 #include <sys/eventfd.h>
 extern "C" {
@@ -13,7 +14,7 @@ extern "C" {
 /* -------------------------------------------------------------------------- */
 
 static char queryText[1024];
-static bool verbose;
+static bool verbose, Results;
 #define info(fmt, ...) \
     do { if(unlikely(verbose)) printf(fmt, ## __VA_ARGS__); } while (0)
 
@@ -30,12 +31,14 @@ public:
 
 void Timer::start(int clock) {
     this->clock = clock;
-    assert(clock_gettime(clock, &ts) == 0);
+    int rc = clock_gettime(clock, &ts);
+    assert(rc == 0); (void)rc;
 }
 double Timer::end()
 {
     struct timespec now;
-    assert(clock_gettime(clock, &now) == 0);
+    int rc = clock_gettime(clock, &now);
+    assert(rc == 0); (void)rc;
     return 1e-9*(now.tv_nsec - ts.tv_nsec) +
                 (now.tv_sec  - ts.tv_sec);
 }
@@ -408,7 +411,7 @@ void PostingsSource::start(const char *positional_filename, const char *lemmatiz
     rqs_left = 0;
 
     int rc = pthread_create(&thread, NULL, &runThreadFunc, this);
-    assert(rc == 0);
+    assert(rc == 0); (void)rc;
 
     info("postings source running\n");
 }
@@ -598,7 +601,6 @@ QueryNode *QueryParser::do_run(const char *query)
 {
     memctx = talloc_new(NULL);
     trd.attach(query, strlen(query));
-    trd.setQueryReadingMode();
 
     try {
         return parseQuery();
@@ -1060,8 +1062,9 @@ void BooleanQueryEngine::printResult(const QueryNode *root)
     assert(postings);
 
     printf("QUERY: %s TOTAL: %d\n", queryText, root->n_postings);
-    for(int i=0; i<root->n_postings; i++) 
-        puts(artitles.lookup(postings[i]));
+    if(!noResults)
+        for(int i=0; i<root->n_postings; i++) 
+            puts(artitles.lookup(postings[i]));
 }
 
 void BooleanQueryEngine::do_run(QueryNode *root)
@@ -1294,8 +1297,9 @@ void PhraseQueryEngine::printResult()
 {
     int n_documents = docs_end - docs;
     printf("QUERY: %s TOTAL: %d\n", queryText, n_documents);
-   for(int i=0; i<n_documents; i++) 
-        puts(artitles.lookup(docs[i].doc_id));
+    if(!noResults)
+        for(int i=0; i<n_documents; i++) 
+            puts(artitles.lookup(docs[i].doc_id));
 }
 
 void PhraseQueryEngine::do_run(QueryNode *root)
@@ -1336,20 +1340,23 @@ void PhraseQueryEngine::run(QueryNode *root)
 
 static void print_usage(void) __attribute__((noreturn));
 static void print_usage(void) {
-    fprintf(stderr, "usage: search [-v]\n");
+    fprintf(stderr, "usage: search [-v] [-r] [-h]\n"
+                    "  -v: print verbose progress information\n"
+                    "  -r: do not print title results\n"
+                    "  -h: print this help message\n");
     exit(1);
 }
 
 int main(int argc, char *argv[])
 {
-    if(argc > 2)
-        print_usage();
-    if(argc == 2) {
-        if(strcmp(argv[1], "-v") == 0)
-            verbose = true;
-        else
-            print_usage();
-    }
+    while(int opt = getopt(argc, argv, "vrh"))
+        switch(opt) {
+            case 'v': verbose = true; break;
+            case 'r': noResults = true; break;
+            case 'h':
+            default: print_usage();
+        }
+    if(optind < argc) print_usage();
 
     artitles.read("db/artitles");
     dictionary.read("db/dictionary");
