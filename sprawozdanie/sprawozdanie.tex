@@ -34,6 +34,27 @@ tekst Wikipedii\footnote{\url{http://www.ii.uni.wroc.pl/~prych/IR/wikipedia_dla_
 morfologik\footnote{\url{http://www.ii.uni.wroc.pl/~prych/text\_mining/bazy_do_tm.txt}}
 oraz listę \textit{stopwords}\footnote{\url{http://www.ii.uni.wroc.pl/~prych/text_mining/stop_words.txt}}.
 
+Projekt został zrealizowany przy użyciu języków C++ oraz Python. Wymagany jest
+system operacyjny Linux wraz z biblioteką \texttt{talloc} (zazwyczaj wystarczy
+zainstalować pakiet \texttt{libtalloc-dev}). Aby skompilować programy należy
+wydać polecenie \texttt{make} w katalogu z kodem źródłowym. Następnie można
+przystąpić do tworzenia indeksu: w tem celu należy wydać polecenie
+\texttt{./create-index.sh}, którego argumentami powinny być kolejno:
+ścieżka do tekstu Wikipedii, ścieżka do morfologika oraz ścieżka do pliku
+\textit{stopwords} (uwaga: pliki te powinny mieć zakończenia linii w formacie
+UNIX; z dostarczonych materiałów plik \textit{stopwords} wymaga konwersji,
+można jej dokonać używając programu \texttt{fromdos}). Wraz z projektem
+dostarczony jest utworzony indeks. Wreszcie można uruchomić wyszukiwarkę
+wydając polecenie \texttt{./search}. Wyszukiwarka domyślnie pracuje w trybie
+wsdadowym: wczytuje zapytania ze standardowego wejścia i wypisuje wyniki na
+standardowe wyjście; można ją zatem przetestować używając polecenia
+\texttt{./search < queries.txt > answers.txt}. Wyszukiwarka posiada tryb
+interaktywny, aktywowany opcją \texttt{-v}. W trybie tym wyszukiwarka wypisuje
+zachęte do wprowadzenia zapytania oraz wiele informacji o przetwarzaniu.
+Ponieważ w trybie interaktywnym wynikowa lista tytułów artykułów często jest
+zbędna, wyszukiwarka posiada również opcję \texttt{-r}, która wyłącza
+wypisywanie listy wyników (informacja o ilości trafień wciąż jest wypisywana).
+
 \section{Ciekawe rozwiązania zastosowane w projekcie}
 Wśród wielu standardowych rozwiązań zastosowanych w projekcie (parser zapytań,
 algorytmy obliczania sumy i iloczynu list postingowych) znalały się też takie,
