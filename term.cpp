@@ -14,7 +14,7 @@ bool TermReader::isWhitespace(int c)
     return true;
 }
 bool TermReader::isTermSeparator(int c) {
-    return (c != '_' && c != '-' && isWhitespace(c)) ||
+    return (c != '_' && c != '-' && c != '.' && isWhitespace(c)) ||
            (c == '|' || c == '(' || c == ')' || c == '"');
 }
 
