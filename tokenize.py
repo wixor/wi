@@ -28,8 +28,8 @@ def tokenize(filename):
 	tytuly_count = 0
 	### reading and parsing file ###
 	with open(filename, 'rb', buffering=2**27) as f_SRC:
-	 with open('db/TITL-'+os.path.basename(filename), 'wb', buffering=2**25) as f_TITL:
-	  with open('db/TOKENS-'+os.path.basename(filename), 'wb', buffering=2**25) as f_TOKENS:
+	 with open('db/artitles', 'wb', buffering=2**25) as f_TITL:
+	  with open('db/tokenized', 'wb', buffering=2**25) as f_TOKENS:
 		f_TITL.write('TITL')
 		f_TITL.seek(4, 1)
 
