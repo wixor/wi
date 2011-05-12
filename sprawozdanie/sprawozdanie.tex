@@ -1,26 +1,230 @@
-\documentclass[a4paper]{article}
+\documentclass[a4paper,12pt]{article}
 \usepackage[utf8]{inputenc}
+\usepackage[polish]{babel}
 \usepackage{polski}
+\usepackage{amsmath}
 \usepackage{a4wide}
-\usepackage{fancyhdr}
-\pagestyle{fancy}
+\usepackage{url}
+\pagestyle{plain}
+
+\makeatletter
+  \renewcommand{\@seccntformat}[1]{\csname the#1\endcsname.\quad}
+\makeatother
+
+\title{\textbf{Wyszukiwanie informacji} \\ pracownia, zadanie nr 1}
+\author{
+Wiktor Janas \thanks{\texttt{wixorpeek@gmail.com}}
+\and
+Mateusz Dereniowski \thanks{\texttt{Mateusz.Dereniowski@gmail.com}}}
 
 \begin{document}
-\title{Wyszukiwanie informacji \\ pracownia - zadanie nr 1}
-\author{Wiktor Janas, nr indeksu 2. . .
-	\thanks{\textit{E-mail}:\texttt{wixorpeek@gmail.com}}
-\and Mateusz Dereniowski, nr indeksu 209116
-\thanks{\textit{E-mail}:\texttt{Mateusz.Dereniowski@gmail.com}}}
 
-\begin{titlepage}
 \maketitle
 \thispagestyle{empty}
-\end{titlepage}
 
-\tableofcontents
-\newpage
+\section{O projekcie}
+Niniejsza praca dokumentuje projekt polegający na stworzeniu wyszukiwarki dla
+polskiej Wikipedii. Projekt obejmuje stworzenie indeksera, czyli programu
+przetwarzającego tekst Wikipedii do postaci ułatwiającej wyszukiwanie, oraz
+samej wyszukiwarki, czyli programu odpowiadającego na zapytania.
 
-\section{}
+Wyszukiwarka obsługuje zapytania boolowskie oraz frazowe, jak również umożliwia
+wyszukiwanie z lematyzacją. W realizacji projektu wykorzystano udostępniony
+tekst Wikipedii\footnote{\url{http://www.ii.uni.wroc.pl/~prych/IR/wikipedia_dla_wyszukiwarek.txt.gz}},
+morfologik\footnote{\url{http://www.ii.uni.wroc.pl/~prych/text\_mining/bazy_do_tm.txt}}
+oraz listę \textit{stopwords}\footnote{\url{http://www.ii.uni.wroc.pl/~prych/text_mining/stop_words.txt}}.
+
+\section{Ciekawe rozwiązania zastosowane w projekcie}
+Wśród wielu standardowych rozwiązań zastosowanych w projekcie (parser zapytań,
+algorytmy obliczania sumy i iloczynu list postingowych) znalały się też takie,
+które wydają się nam szczególnie ciekawe. Zostały one opisane poniżej.
+
+\subsection{Zamiana słów na liczby}
+Rozwiązanie problemu zamiany słów na liczby jest podstawową kwestią wymagającą
+rozwiązania w wyszukiwarce: operacje na słowach są nieefektywne, słowami nie
+można na przykład indeksować tablicy (,,tablica'' umożliwiająca taką operację
+jest w istocie słownikiem i czas dostępu do niej często jest niezadawalający).
+Z jednej strony wejściem dla indeksera jest wielki zbiór słów, z drugiej strony
+wyszukiwarka powinna możliwie błyskawicznie parsować zapytanie.
+
+Standardowym podejściem do problemu byłoby posortowanie wszystkich znanych słów
+leksykograficznie, a następnie zastosowanie wyszukiwania binarnego w celu
+odnalezienia indeksu poszukiwanego słowa w tablicy. Inną (równoważną)
+możliwością byłoby umieszczenie słów w zbalansowanym drzewie poszukiwań
+binarnych. Oba te podejścia charakteryzuje jednak logarytmiczny czas dostępu do
+słowa (względem ilości słów). Ponadto wymagają one dość chaotycznych dostępów
+do pamięci, co redukuje efektywność cache'a procesora. Uzyskanie stałego czasu
+dostępu byłoby możliwe z wykorzystaniem struktury trie, jest ona jednak bardzo
+pamięciożerna.
+
+Rozwiązanie zastosowane w tej pracy opiera się na tabeli hashującej.
+Podczas budowania indeksu wszystkie słowa są hashowane i dzielone na kubełki.
+W kubełku ustalana jest arbitralna kolejność słów. Następnie wszystkie kubełki
+są konkatenowane: w ten sposób każde słowo otrzymuje swój unikalny
+identyfikator z przedziału od zera do $\text{ilości słów} - 1$. Wyszukiwanie
+numeru słowa polega na obliczeniu jego hasha oraz odnalezienia numeru szukanego
+słowa w kubełku. Aby obliczyć identyfikator wystarczy numer ten dodać do
+łącznej ilości słów we wszystkich poprzedzających kubełkach (wielkość tą
+oblicza się prostym preprocessingiem i zapamiętuje).
+
+\subsection{Lematyzacja}
+Celem lematyzacji jest uniezależnienie wyników zapytania od form gramatycznych
+użytych przez użytkownika i autora tekstu. W związku z tym, w odpowiedzi na term
+wpisany przez użytkownika chcemy zwrócić dokument, w którym występuje
+jakiekolwiek słowo, które ma wspólną formę bazową z termem z zapytania. Prostą
+realizacją tego pomysłu byłoby: zindeksuj każdy term z Wikipedii jako wszystkie
+jego formy bazowe, zaś przy wykonywaniu zapytania potraktuj term z zapytania
+jako sumę (or) wszystkich jego form bazowych. Niestety takie podejście narzuca
+na wyszukiwarkę konieczność zamienienia każdego termu na odpowiednią sumę,
+obliczania tych sum oraz, co najgorsze, odczytywania z dysku wielu list
+postingowych.
+
+W niniejszej pracy zastosowano inne rozwiązanie. Przypuśćmy, że dla każdego
+termu znajdujemy wszystkie jego formy bazowe, zaś dla każdej z nich znajdujemy
+z kolei wszystkie formy pochodne. Otrzymane zbiory sumujemy i term początkowy
+indeksujemy jako każdy z termów z wynikowej sumy. Na przykład dla termu
+,,kota'' formy bazowe to ,,kot'' oraz ,,kota''. Pochodnymi słowa ,,kot'' są
+,,kocie'', ,,kotowi'', ,,kotów'' itd., zaś pochodnymi słowa ,,kota'' są
+na przykład ,,kotą'' oraz ,,koto''. Zatem słowo ,,kota'' zostałoby zindeksowane
+jako każde z powyższych słów.
+
+Opisane powyżej podejście zwalnia wyszukiwarkę z obowiązku sprawdzania form
+bazowych w morfologiku oraz obliczania sum; niesie jednak za sobą koszt
+niebagatelnego zwiększenia rozmiaru słownika: zwykły rzeczownik odmienia się
+przecież przez siedem przypadków i dwie liczby, zatem zostałby zindeksowany
+przynajmniej czternaście razy! Problem ten jednak da się rozwiązać korzystając
+z następującej obserwacji: prawie wszystkie formy pochodne jednego rzeczownika
+mają tylko jedną formę bazową. Zatem wszystkie one będą miały dokładnie te same
+wpisy na listach lematyzowanych. Można zatem pamiętać tylko jedną taką listę
+i zapisać w indeksie, że wszystkie formy tego rzeczownika współdzielą ją.
+Rozwiązanie to nie usuwa całkowicie problemu duplikacji: w morfologiku może
+wystąpić sytuacja, gdzie bazą dla \texttt{a} jest \texttt{A}, zaś bazą dla
+\texttt{b} jest \texttt{A} oraz \texttt{B}. W takim razie wystąpienie termu
+\texttt{a} powinno zostać zindeksowane jako wystąpienie \texttt{a} oraz
+\texttt{b}, jednak wystąpienie \texttt{b} liczy się jedynie jako wystąpienie
+\texttt{b}. Widać zatem, że nie każdy term zostanie zindeksowany dokładnie raz.
+Nie stanowi to jednak poważnego problemu: łatwo zauważyć, że sytuacja taka może
+wystąpić jedynie w przypadku słów, które mają przynajmniej dwie formy bazowe,
+słów takich jest zaś niewiele. Dzięki powyższej optymalizacji rozmiar indeksu
+nie rośnie istotnie, zaś wyszukiwarka nie musi martwić się lematyzacją.
+
+\subsection{Wczytywanie list w tle}
+Najwolniejszą operacją w systemie komputerowym jest przesuwanie głowicy
+dysku. Żądania odczytu generowane przez wyszukiwarkę są niestety bardzo
+rozproszone (listy pozycyjne odpowiadające termom w zapytaniu prawie
+nigdy nie znajdują się obok siebie). Przeto przez lwią część czas
+wyszukiwarka oczekuje na dane z dysku. Jest to okazja do optymalizacji:
+wyszukiwarka może zlecić wykonanie odczytów innemu wątkowi; kiedy tylko
+dostarczy on jakąś listę pozycyjną może ona przystąpić do jej przetwarzania,
+zaś ów wątek może bez zwłoki zażądać od systemu odczytu kolejnej listy
+postingowej. Ponieważ czas przetwarzania listy znacznie dominuje nad czasem
+odczytu z dysku, powinno dać się go ,,ukryć'' tak, aby nie miał wpływu na
+całkowity czas wykonywania zapytania.
+
+W wyszukiwarce zastosowano opisaną powyżej optymalizację. Okazuje się jednak,
+że jej wpływ nie jest znaczący. Częściowo jest to spowodowane tym, że wiele
+zapytań składa się z dwóch lub trzech słów. Ponieważ główny wątek potrzebuje
+przynajmniej dwóch list, aby wykonać jakieś obliczenia, w przypadku krótkich
+zapytań może okazać się, że przetwarzanie można rozpocząć dopiero po odczytaniu
+z dysku wszystkich zażądanych list.
+
+Inną możliwą do wykonania optymalizacją jest zażądanie od systemu odczytu
+\textit{wielu} list jednocześnie. Należy przypuszczać, że spowodowałoby
+to znaczny spadek czasu odczytu z dysku, gdyż system mógłby wysłać wiele
+żądań do dysku, ten zaś mógłby zoptymalizować trasę głowicy nad tależami
+(mechanizmy takie istnieją i są wykorzystywane w zaawansowanych aplikacjach).
+Tej optymalizacji jednak nie zaimplementowano.
+
+\subsection{Optymalizator}
+Przed przystąpieniem do wykonywania zapytania boolowskiego uruchamiany jest
+na nim optymalizator. Operuje on na drzewie zapytania i potrafi dokonać
+następujących przekształceń:
+\begin{itemize}
+ \item usuwanie termów o pustych listach postingowych (jeśli term taki
+ pojawi się w klauzuli AND, cała klauzula jest od razu zamieniana na
+ pustą listę postingową; w klauzuli OR term jest po prostu usuwany),
+ \item usuwanie \textit{stopwords} (\textit{stopwords} są usuwane jedynie
+ z klauzul AND oraz jedynie gdy ich ilość nie przekracza połowy ilości
+ termów w zapytaniu),
+ \item sklejanie takich samych termów (wykonywanie operacji AND lub
+ OR na takich samych termach nie ma sensu, zduplikowane wystąpienia 
+ termu są usuwane; porównywanie dokonywane jest przy użyciu identyfikatora
+ listy postingowej; ze względu na mechanizm lematyzacji termy w zapytaniu
+ \texttt{kotu|kotom} mają ten sam identyfikator i jeden z nich zostanie
+ usunięty),
+ \item obliczanie optymalnej kolejności łączenia list (używany jest
+ algorytm Huffmana, przy czym dla operacji OR przyjmuje się, że
+ rozmiar wyniku będzie sumą rozmiarów danych wejściowych, zaś dla
+ klauzuli AND -- minimum).
+\end{itemize}
+Dla zapytań frazowych optymalizator znajduje jedynie optymalną kolejność
+łączenia list: od najkrótszych do najdłuższych.
+Pomimo wykonania powyższych optymalizacji, w zapytaniu wciąż mogą pojawić
+się wielokrotnie te same listy postingowe, na przykład w zapytaniu
+\texttt{(pies kot) | (słoń pies|kot)}. Znajdowany jest więc zbiór
+unikalnych list postingowych tak, aby każdą listę odczytać z dysku
+tylko raz.
+
+\section{Budowanie indeksu}
+Proces budowania indeksu podzielony jest na kilka etapów; każdy z nich jest
+wykonywany przez osobny program, które przekazują sobie dane przy użyciu plików
+pośrednich.
+
+\paragraph{Tokenizacja Wikipedii} Dostarczone dane wejściowe są zamieniane
+na format, w którym każdy artykuł jest zapisany w jednej linii składającej się
+z kolejnych słów występujących w artykule oddzielonych spacjami. Na tym etapie
+usuwane są wszystkie zbędne znaki, dokonywana jest zamianana liter na małe
+oraz formowane są termy. Na tym etapie powstaje również lista tytułów
+artykułów (plik \texttt{TITL}).
+
+\paragraph{Tworzenie korpusu} Na podstawie ztokenizowanej wikipedii oraz
+morfologika tworzony jest korpus. Jest to plik o formacie podobnym do
+słownika. Stanowi on tabelę hashującą zawierającą termy Wikipedii oraz
+morfologika. Dzięki temu plikowi w dalszej części procesu możliwa będzie
+łatwa zamiana słów na liczby. Należy zauważyć, że w pliku tym umieszczane są
+wszystkie słowa, z jakimi kiedykolwiek może spotkać się indekser.
+
+\paragraph{Parsowanie morfologika} Przy użyciu korpusu tworzona jest binarna
+wersja morfologika: zawiera ona takie same informacje, jak zwykły morfologik
+jednak jest prostsza w obsłudze, ponieważ wszystkie termy zamienione zostają
+na ich identyfikatory. Ponadto morfologik zostaje uzupełniony o słowa
+znajdujące się w korpusie, a nie znajdujące się w oryginalnym morfologiku:
+dla słow tych przyjmuje się, że są one swoją postacią bazową.
+
+\paragraph{Wykrywanie aliasów} Na podstawie binarnego morfologika tworzona
+jest baza aliasów: dla każdego termu określane jest, czy powinien on mieć
+swoją własną listę lematyzowaną, czy też powinien korzystać z listy innego
+termu (czyli być aliasem). Jeśli term powinien być aliasem, określane jest,
+czyjej listy lematyzowanej powinien używać.
+
+\paragraph{Budowanie grafu lematyzacji} Na podstawie binarnego morfologika
+oraz bazy aliasów tworzony jest graf lematyzacji: dla każdego termu budowana
+jest lista termów, których listy lematyzowane powinny zawierać jego
+wystąpienia. Na listę tą trafiają jedynie te termy, które nie są aliasami.
+
+\paragraph{Digitizacja} Ztokenizowana Wikipedia zamieniana jest na format
+binarny, to znaczy kolejne tokeny zamieniane są na trójki (\texttt{id\_tokenu},
+\texttt{nr\_dokumentu}, \texttt{nr\_słowa\_w\_dokumencie}), gdzie wartość
+\texttt{id\_tokenu} wyznaczana jest przez korpus.
+
+\paragraph{Lematyzacja} Na postawie zdigitizowanej Wikipedii oraz grafu
+lematyzacji przeprowadzana jest lematyzacja: każdy term zdigitizowanej
+Wikipedii jest zamieniany na te termy, których listy lematyzowane powinny
+złapać jego wystąpienie.
+
+\paragraph{Odwracanie} Zdigitizowana Wikipedia oraz zlematyzowana Wikipedia
+są sortowane leksykograficznie, przez co powstają zaczątki indeksu odwróconego.
+
+\paragraph{Tworzenie indeksów i słownika} Na podstawie korpusu oraz indeksów
+odwróconych powstałych w poprzednim kroku powstaje słownik (plik
+\texttt{DICT}), indeks pozycyjny (plik \texttt{IDXP}) oraz indeks zlematyzowany
+(plik \texttt{IDXL}). Na tym etapie usuwane są słowa, które nie mają żadnych
+postingów (mogły one znaleźć się w korpusie, gdyż występowały w morfologiku,
+jednak żaden term Wikipedii nie ,,aktywował'' ich).
+
+\paragraph{Oznaczanie stopwords} W gotowych plikach indeksu na każde
+\textit{stopword} nanoszony jest specjalny znacznik, który jest rozpoznawany
+przez wyszukiwarkę.
 
 \end{document}
 
