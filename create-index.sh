@@ -8,8 +8,10 @@ BOLD="\033[1m"
 NORM="\033[22m"
 step() { echo "$BOLD --- $1$NORM"; }
 
+step "tokenizing wiki"
+./tokenize.py $WIKI
 step "building corpus"
-./make-corpus $WIKI $MORFO
+./make-corpus db/tokenized $MORFO
 step "parsing morphologic"
 ./make-binmorfo $MORFO
 step "finding aliases"
@@ -17,7 +19,7 @@ step "finding aliases"
 step "building mosquare"
 ./make-mosquare
 step "digitizing wiki"
-./digitize < $WIKI > db/digital
+./digitize < db/tokenized > db/digital
 step "inverting wiki"
 ./invert db/digital > db/inverted && rm db/digital
 step "lemmatizing wiki"
