@@ -1,4 +1,5 @@
 #include <time.h>
+#include <getopt.h>
 #include <pthread.h>
 #include <sys/eventfd.h>
 extern "C" {
@@ -12,10 +13,10 @@ extern "C" {
 
 /* -------------------------------------------------------------------------- */
 
-#define info(fmt, ...) printf(fmt, ## __VA_ARGS__)
-//#define info(fmt, ...)
-struct QueryNode;
-static void dump_query_tree(const QueryNode *node, int indent = 0);
+static char queryText[1024];
+static bool verbose, noResults;
+#define info(fmt, ...) \
+    do { if(unlikely(verbose)) printf(fmt, ## __VA_ARGS__); } while (0)
 
 /* -------------------------------------------------------------------------- */
 
@@ -30,12 +31,14 @@ public:
 
 void Timer::start(int clock) {
     this->clock = clock;
-    assert(clock_gettime(clock, &ts) == 0);
+    int rc = clock_gettime(clock, &ts);
+    assert(rc == 0); (void)rc;
 }
 double Timer::end()
 {
     struct timespec now;
-    assert(clock_gettime(clock, &now) == 0);
+    int rc = clock_gettime(clock, &now);
+    assert(rc == 0); (void)rc;
     return 1e-9*(now.tv_nsec - ts.tv_nsec) +
                 (now.tv_sec  - ts.tv_sec);
 }
@@ -60,6 +63,8 @@ Artitles::~Artitles() {
     if(memctx) talloc_free(memctx);
 }
 
+static Artitles artitles; /* GLOBAL */
+
 void Artitles::read(const char *filename)
 {
     assert(!memctx);
@@ -80,7 +85,7 @@ void Artitles::read(const char *filename)
 
     Reader rd(data, size);
     
-    assert(rd.read_u32() == 0x4c544954);
+    if(rd.read_u32() != 0x4c544954) abort();
     int n_articles = rd.read_u32();
 
     titles = talloc_array(memctx, char *, n_articles);
@@ -92,8 +97,6 @@ void Artitles::read(const char *filename)
 
     info("article titles read in %.03lf seconds.\n", timer.end());
 }
-
-static Artitles artitles; /* GLOBAL */
 
 /* -------------------------------------------------------------------------- */
 
@@ -182,7 +185,7 @@ void Dictionary::read(const char *filename)
 void Dictionary::do_read(Reader rd)
 {
     /* check magic value */
-    assert(rd.read_u32() == 0x54434944);
+    if(rd.read_u32() != 0x54434944) abort();
 
     /* read hash function parameters */
     hasher.a = rd.read_u32();
@@ -386,7 +389,7 @@ int PostingsSource::openIndex(const char *filename, uint32_t magic)
     
     uint32_t mg;
     fio.read_raw(&mg, sizeof(mg));
-    assert(mg == magic);
+    if(mg != magic) abort();
 
     return fio.filedes();
 }
@@ -407,7 +410,8 @@ void PostingsSource::start(const char *positional_filename, const char *lemmatiz
     lemmatized_fd = openIndex(lemmatized_filename, 0x4c584449);
     rqs_left = 0;
 
-    assert(pthread_create(&thread, NULL, &runThreadFunc, this) == 0);
+    int rc = pthread_create(&thread, NULL, &runThreadFunc, this);
+    assert(rc == 0); (void)rc;
 
     info("postings source running\n");
 }
@@ -597,7 +601,6 @@ QueryNode *QueryParser::do_run(const char *query)
 {
     memctx = talloc_new(NULL);
     trd.attach(query, strlen(query));
-    trd.setQueryReadingMode();
 
     try {
         return parseQuery();
@@ -624,12 +627,53 @@ protected:
     PostingsSource::ReadRq *rqs;
     int term_count, rqs_count;
 
+    static inline void dumpQueryTree(const QueryNode *node, const char *title);
+    static void dumpQueryTree(const QueryNode *node, int indent);
+
     static void resolveTerms(QueryNode *node, IndexType idxtype);
     static int countTerms(const QueryNode *node);
     static int countNodes(const QueryNode *node);
     static int extractTerms(QueryNode *node, QueryNode **ptr);
     void createRqs();
 };
+
+void QueryEngineBase::dumpQueryTree(const QueryNode *node, const char *title)
+{
+    if(!verbose) return;
+    puts(title);
+    dumpQueryTree(node, 3);
+}
+
+void QueryEngineBase::dumpQueryTree(const QueryNode *node, int indent)
+{
+    static const char spaces[] = "                                                                                ";
+    printf("%.*s %p: ", indent, spaces, node);
+    if(!node) {
+        printf("NULL\n");
+        return;
+    }
+    switch(node->type) {
+        case QueryNode::TERM:
+            printf("TERM: »%s« (%d), postings: %d\n",
+                node->term_text, node->term_id, node->n_postings);
+            return;
+        case QueryNode::OR:
+            printf("OR, expected: %d\n", node->estim_postings);
+            dumpQueryTree(node->lhs, 3+indent);
+            dumpQueryTree(node->rhs, 3+indent);
+            return;
+        case QueryNode::AND:
+            printf("AND, expected: %d\n", node->estim_postings);
+            dumpQueryTree(node->lhs, 3+indent);
+            dumpQueryTree(node->rhs, 3+indent);
+            return;
+        case QueryNode::PHRASE:
+            printf("PHRASE\n");
+            for(const QueryNode *p = node->rhs; p; p = p->rhs)
+                dumpQueryTree(p, 3+indent);
+            return;
+    }
+}
 
 void QueryEngineBase::resolveTerms(QueryNode *node, IndexType idxtype)
 {
@@ -1017,9 +1061,10 @@ void BooleanQueryEngine::printResult(const QueryNode *root)
     const int *postings = (const int *)root->postings;
     assert(postings);
 
-    printf("--- RESULTS: %d pages\n", root->n_postings);
-    for(int i=0; i<root->n_postings; i++) 
-        printf("  %d: %s\n", i+1, artitles.lookup(postings[i]));
+    printf("QUERY: %s TOTAL: %d\n", queryText, root->n_postings);
+    if(!noResults)
+        for(int i=0; i<root->n_postings; i++) 
+            puts(artitles.lookup(postings[i]));
 }
 
 void BooleanQueryEngine::do_run(QueryNode *root)
@@ -1028,8 +1073,7 @@ void BooleanQueryEngine::do_run(QueryNode *root)
 
     resolveTerms(root, LEMMATIZED);
     
-    info("raw query:\n");
-    dump_query_tree(root);
+    dumpQueryTree(root, "raw query:");
 
     node_count = countNodes(root);
     stopword_count = countStopwords(root);
@@ -1040,8 +1084,7 @@ void BooleanQueryEngine::do_run(QueryNode *root)
     root = optimize(root);
     fixParents(root);
 
-    info("optimized query:\n");
-    dump_query_tree(root);
+    dumpQueryTree(root, "optimized query:");
     
     term_count = countTerms(root);
 
@@ -1202,7 +1245,6 @@ void PhraseQueryEngine::makeWorkingSet(Reader rd, int n_postings, int offset)
     /* find out where positions start */
     int positions_offset = 4 + rd.read_u32();
 
-    int foo = rd.size() - positions_offset + n_postings;
     /* allocate memory (positions may be bigger than necessary) */
     docs = talloc_array(memctx, struct doc, n_postings);
     positions = talloc_array(memctx, pos_t, rd.size() - positions_offset + n_postings);
@@ -1244,8 +1286,6 @@ void PhraseQueryEngine::makeWorkingSet(Reader rd, int n_postings, int offset)
         }
     }
 
-    assert(positions_wrptr-positions <= foo);
-
     /* remember how many documents we have */
     docs_end = docs_wrptr;
 }
@@ -1253,9 +1293,10 @@ void PhraseQueryEngine::makeWorkingSet(Reader rd, int n_postings, int offset)
 void PhraseQueryEngine::printResult()
 {
     int n_documents = docs_end - docs;
-    printf("--- RESULTS: %d pages\n", n_documents);
-    for(int i=0; i<n_documents; i++) 
-        printf("  %d: %s\n", i+1, artitles.lookup(docs[i].doc_id));
+    printf("QUERY: %s TOTAL: %d\n", queryText, n_documents);
+    if(!noResults)
+        for(int i=0; i<n_documents; i++) 
+            puts(artitles.lookup(docs[i].doc_id));
 }
 
 void PhraseQueryEngine::do_run(QueryNode *root)
@@ -1266,8 +1307,7 @@ void PhraseQueryEngine::do_run(QueryNode *root)
 
     resolveTerms(root, POSITIONAL);
     
-    info("raw query:\n");
-    dump_query_tree(root);
+    dumpQueryTree(root, "raw query:");
 
     term_count = countTerms(root);
 
@@ -1295,67 +1335,56 @@ void PhraseQueryEngine::run(QueryNode *root)
 
 /* -------------------------------------------------------------------------- */
 
-static void dump_query_tree(const QueryNode *node, int indent)
-{
-    static const char spaces[] = "                                                                                ";
-    info("%.*s %p: ", indent, spaces, node);
-    if(!node) {
-        info("NULL\n");
-        return;
-    }
-    switch(node->type) {
-        case QueryNode::TERM:
-            info("TERM: »%s« (%d), postings: %d\n",
-                node->term_text, node->term_id, node->n_postings);
-            return;
-        case QueryNode::OR:
-            info("OR, expected: %d\n", node->estim_postings);
-            dump_query_tree(node->lhs, 3+indent);
-            dump_query_tree(node->rhs, 3+indent);
-            return;
-        case QueryNode::AND:
-            info("AND, expected: %d\n", node->estim_postings);
-            dump_query_tree(node->lhs, 3+indent);
-            dump_query_tree(node->rhs, 3+indent);
-            return;
-        case QueryNode::PHRASE:
-            info("PHRASE\n");
-            for(QueryNode *p = node->rhs; p; p = p->rhs)
-                dump_query_tree(p, 3+indent);
-            return;
-    }
+static void print_usage(void) __attribute__((noreturn));
+static void print_usage(void) {
+    fprintf(stderr, "usage: search [-v] [-r] [-h]\n"
+                    "  -v: print verbose progress information\n"
+                    "  -r: do not print title results\n"
+                    "  -h: print this help message\n");
+    exit(1);
 }
 
-static void run_query(const char *query)
+int main(int argc, char *argv[])
 {
-    Timer timer; timer.start();
+    while(int opt = getopt(argc, argv, "vrh"))
+        if(opt == -1) break;
+        else switch(opt) {
+            case 'v': verbose = true; break;
+            case 'r': noResults = true; break;
+            case 'h':
+            default: print_usage();
+        }
+    if(optind < argc) print_usage();
 
-    QueryNode *root = QueryParser::run(query);
-    if(!root)
-        return;
-
-    if(root->type == QueryNode::PHRASE)
-        PhraseQueryEngine::run(root);
-    else
-        BooleanQueryEngine::run(root);
-
-    talloc_free(talloc_parent(root));
-
-    printf("--- total time: %.3lf miliseconds\n", timer.end()*1000.f);
-}
-
-int main(void)
-{
     artitles.read("db/artitles");
     dictionary.read("db/dictionary");
     posrc.start("db/positional", "db/lemmatized");
 
-    for(;;) {
-        static char buffer[1024];
-        printf("Enter query: "); fflush(stdout);
-        if(fgets(buffer, 1023, stdin) == NULL)
+    for(;;)
+    {
+        if(verbose) printf("Enter query: "), fflush(stdout);
+        if(fgets(queryText, sizeof(queryText)-1, stdin) == NULL)
             break;
-        run_query(buffer);
+        {
+            char *endl = strchr(queryText, '\n');
+            if(endl) *endl = '\0';
+        }
+
+        Timer wallTime, cpuTime;
+        wallTime.start(CLOCK_MONOTONIC);
+        cpuTime.start(CLOCK_PROCESS_CPUTIME_ID);
+
+        QueryNode *root = QueryParser::run(queryText);
+        if(!root)
+            continue;
+        if(root->type == QueryNode::PHRASE)
+            PhraseQueryEngine::run(root);
+        else
+            BooleanQueryEngine::run(root);
+        talloc_free(talloc_parent(root));
+
+        info("--- total time: %.3lf ms wall / %.3lf ms cpu\n",
+             wallTime.end()*1000.f, cpuTime.end()*1000.f);
     }
 
     return 0;

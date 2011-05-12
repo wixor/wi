@@ -66,7 +66,7 @@ void Dictionary::read(const char *filename)
 void Dictionary::do_read(Reader rd)
 {
     /* check magic value */
-    assert(rd.read_u32() == 0x54434944);
+    if(rd.read_u32() != 0x54434944) abort();
 
     /* read hash function parameters */
     hasher.a = rd.read_u32();
