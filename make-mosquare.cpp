@@ -37,8 +37,8 @@ int main(void)
 
     FileMapping ali("db/aliases");
     Reader alird(ali.data(), ali.size());
-    assert(alird.read_u32() == 0x41494c41);
-    assert(alird.read_u32() == n_words);
+    if(alird.read_u32() != 0x41494c41) abort();
+    if(alird.read_u32() != n_words) abort();
     const int *aliases = (const int *)alird.buffer() + 2;
 
     std::vector<int> e;
