@@ -1080,6 +1080,7 @@ void BooleanQueryEngine::do_run(QueryNode *root)
 
     QueryNode *_scratchpad[node_count]; scratchpad = _scratchpad;
 
+    term_count = countTerms(root);
     linearize(root);
     root = optimize(root);
     fixParents(root);
@@ -1087,7 +1088,6 @@ void BooleanQueryEngine::do_run(QueryNode *root)
     dumpQueryTree(root, "optimized query:");
     
     term_count = countTerms(root);
-
     QueryNode *_terms[term_count]; terms = _terms;
     PostingsSource::ReadRq _rqs[term_count]; rqs = _rqs;
 

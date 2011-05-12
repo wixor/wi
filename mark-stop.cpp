@@ -110,13 +110,10 @@ int main(int argc, char *argv[])
         buf[len-1] = '\0'; len--;
 
         int key = lookup(buf, len);
-        if(key == -1) {
-            fprintf(stderr,"word not found: »%s«\n", buf);
-            return 1;
-        } else 
-            fprintf(stderr, "word »%s« has key %d\n", buf, key);
-
-        word_array[4*key+3] |= 0x80;
+        if(key == -1)
+            fprintf(stderr,"WARNING: word not found: »%s«\n", buf);
+        else 
+            word_array[4*key+3] |= 0x80;
     }
 
     munmap(mapping, size);

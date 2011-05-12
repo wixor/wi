@@ -1,7 +1,9 @@
 #!/bin/sh
 WIKI=$1
 MORFO=$2
+STOPWRDS=$3
 set -e
+mkdir -p db/
 rm -f db/*
 
 BOLD="\033[1m"
@@ -28,4 +30,6 @@ step "inverting lemmatized wiki"
 ./invert db/dilemma > db/invlemma && rm db/dilemma
 step "building index"
 ./make-index
+step "marking stopwords"
+./mark-stop < $STOPWRDS
 
