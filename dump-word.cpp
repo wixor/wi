@@ -1,5 +1,7 @@
 #include <string.h>
-#include <talloc.h>
+extern "C" {
+	#include <talloc.h>
+}
 #include "bufrw.h"
 #include "term.h"
 #include "fileio.h"
