@@ -18,11 +18,11 @@ def tokenize(filename):
 	"""Tokenizing given text,\nTitles starts with tag: "##TITLE## "."""
 
 	title_pattern = re.compile(r"^##TITLE## (.*)$")
-	word = ur"""[a-zß-öø-ÿĀ-ſ]"""
-	not_word = ur"""[^a-zß-öø-ÿĀ-ſ]""" # ąęśćżźńółèüäéáúūōíñõ
-	unwanted_char = re.compile(ur"{0}[^-0-9.']".format(not_word), re.U)
-	symbols = ur"""[,"!?:;@#$%^&*()+_=[\]{}\|<>/]"""
-	unwanted_symbol = re.compile(ur"(?:{symbols})|(?:(?<={not_word})[-.'])|(?:[-.'](?={not_word}))|(?:^[-.'])|(?:[-.']$)".format(symbols=symbols, not_word=not_word), re.U)
+	word = ur"""a-zß-öø-ÿĀ-ſ"""
+	not_word = ur"""[^{0}]""".format(word) # ąęśćżźńółèüäéáúūōíñõ
+	unwanted_char = re.compile(ur"[^-{word}0-9.']".format(word=word), re.U)
+	#symbols = ur"""[,"!?:;@#$%^&*()+_=[\]{}\|<>/]"""
+	unwanted_symbol = re.compile(ur"(?:[^-{word}0-9.'])|(?:(?<={not_word})[-.'])|(?:[-.'](?={not_word}))|(?:^[-.'])|(?:[-.']$)".format(word=word, not_word=not_word), re.U)
 	parenthesis = re.compile(ur"[()]", re.U)
 
 	tytuly_count = 0
