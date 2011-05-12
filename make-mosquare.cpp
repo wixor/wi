@@ -7,7 +7,7 @@ int main(void)
 {
     FileMapping morf("db/morfologik");
     Reader rd(morf.data(), morf.size());
-    assert(rd.read_u32() == 0x46524f4d);
+    if(rd.read_u32() != 0x46524f4d) abort();
     int n_words = rd.read_u32();
 
     std::vector<long long> v;

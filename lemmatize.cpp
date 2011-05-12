@@ -13,7 +13,7 @@ int main(void)
 {
     FileMapping mosquare("db/mosquare");
     Reader rd(mosquare.data(), mosquare.size());
-    assert(rd.read_u32() == 0x51534f4d);
+    if(rd.read_u32() != 0x51534f4d) abort();
     int n_words = rd.read_u32();
 
     int *offs = (int *)malloc(sizeof(int) * n_words);

@@ -166,12 +166,13 @@ int main(void)
 
     Corpus corp("db/corpus");
 
-    assert(alird.read_u32() == 0x41494c41);
-    assert(alird.read_u32() == corp.size());
+    if(alird.read_u32() != 0x41494c41) abort();
+    if(alird.read_u32() != corp.size()) abort();
     int *aliases = (int *)aliasmap.data() + 2;
     int n_terms = corp.size();
 
     term *terms = (term *)malloc(sizeof(struct term) * n_terms);
+    assert(terms);
 
     int lemmatized_list_count = 0;
     for(int i=0, buck=0, bidx=0; i<n_terms; i++)
@@ -208,6 +209,7 @@ int main(void)
 
     int n_buckets = corp.buckets();
     int *bucket_sizes = (int *)malloc(sizeof(int) * n_buckets);
+    assert(bucket_sizes);
     memset(bucket_sizes, 0, sizeof(int) * n_buckets);
     for(int i=0; i<n_terms; i++)
         if(!terms[i].empty)
