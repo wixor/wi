@@ -56,7 +56,7 @@ def tokenize(filename):
 						f_TOKENS.write(' ' + token.encode('utf8'))
 		f_TOKENS.write('\n')
 
-	 with open('db/TITL-'+os.path.basename(filename), 'rb+') as f_TITL:
+	 with open('db/artitles', 'rb+') as f_TITL:
 		f_TITL.seek(4, 0)
 		f_TITL.write(pack('<I', tytuly_count))
 
