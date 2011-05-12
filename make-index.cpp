@@ -17,7 +17,7 @@ struct term {
     struct {
         int n_entries, length;
     } positional;
-    bool empty;
+    bool has_lemmatized, has_positional, empty;
 };
 
 static void seek_until(int id, Reader *rd)
@@ -150,19 +150,9 @@ static bool write_positional(struct term *term, Reader *rd, const FileIO &fio)
 
 int main(void)
 {
-    FileMapping invmap("db/inverted"),
-                invlemmap("db/invlemma"), 
-                aliasmap("db/aliases");
+    FileMapping aliasmap("db/aliases");
 
-    Reader inv(invmap.data(), invmap.size()),
-           invlem(invlemmap.data(), invlemmap.size()),
-           alird(aliasmap.data(), aliasmap.size());
-
-    FileIO positional("db/positional", O_WRONLY|O_CREAT|O_TRUNC),
-           lemmatized("db/lemmatized", O_WRONLY|O_CREAT|O_TRUNC);
-
-    positional.write_raw("IDXP", 4);
-    lemmatized.write_raw("IDXL", 4);
+    Reader alird(aliasmap.data(), aliasmap.size());
 
     Corpus corp("db/corpus");
 
@@ -174,7 +164,6 @@ int main(void)
     term *terms = (term *)malloc(sizeof(struct term) * n_terms);
     assert(terms);
 
-    int lemmatized_list_count = 0;
     for(int i=0, buck=0, bidx=0; i<n_terms; i++)
     {
         term *term = terms+i;
@@ -192,14 +181,36 @@ int main(void)
             buck++;
             bidx = 0;
         }
+    }
+    
+    {
+        FileMapping invmap("db/inverted");
+        Reader inv(invmap.data(), invmap.size());
+        FileIO positional("db/positional", O_WRONLY|O_CREAT|O_TRUNC);
+        positional.write_raw("IDXP", 4);
+        for(int i=0; i<n_terms; i++)
+             terms[i].has_positional = write_positional(terms+i, &inv, positional);
+    }
+    {
+        FileMapping invlemmap("db/invlemma");
+        Reader invlem(invlemmap.data(), invlemmap.size());
+        FileIO lemmatized("db/lemmatized", O_WRONLY|O_CREAT|O_TRUNC);
+        lemmatized.write_raw("IDXL", 4);
+        for(int i=0; i<n_terms; i++)
+            terms[i].has_lemmatized = write_lemmatized(terms+i, &invlem, lemmatized);
+    }
 
-        bool has_lemmatized = write_lemmatized(term, &invlem, lemmatized),
-             has_positional = write_positional(term, &inv, positional);
+    int lemmatized_list_count = 0;
+    for(int i=0; i<n_terms; i++)
+    {
+        term *term = terms+i;
 
-        assert(term->alias == i || !has_lemmatized);
+        assert(term->alias == i || !term->has_lemmatized);
         
         term->empty = true;
-        term->empty = !has_lemmatized && !has_positional && terms[term->alias].empty;
+        term->empty = !term->has_lemmatized &&
+                      !term->has_positional &&
+                      terms[term->alias].empty;
         
         if(term->alias != i)
             term->lemmatized.id = terms[term->alias].lemmatized.id;
