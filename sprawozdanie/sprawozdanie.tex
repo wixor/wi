@@ -253,5 +253,24 @@ przez wyszukiwarkę.
 	\item \texttt{./create-index.sh \textit{wikipedia morfologik stopwords}}
 \end{itemize}
 
+\newpage
+
+\section{Testy}
+
+tokenizowanie:
+\begin{verbatim}
+i209116@odilon:/var/tmp/derenio/wi$ /usr/bin/time python tokenize.py ../wikipedia_dla_wyszukiwarek.txt
+454.72user 1.10system 7:36.48elapsed 99%CPU (0avgtext+0avgdata 734528maxresident)k
+16inputs+1691192outputs (0major+46131minor)pagefaults 0swaps
+\end{verbatim}
+
+sprawdzanie poprawności wygenerowanych tokenów:
+\begin{verbatim}
+i209116@odilon:/var/tmp/derenio/wi$ /usr/bin/time python tests/check_unwanted_chars.py db/tokenized
+256.82user 0.34system 4:17.34elapsed 99%CPU (0avgtext+0avgdata 29296maxresident)k
+0inputs+0outputs (0major+15363minor)pagefaults 0swaps
+\end{verbatim}
+
+
 \end{document}
 

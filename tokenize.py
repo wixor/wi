@@ -9,7 +9,7 @@ from struct import pack
 import re
 import string
 
-dummy_word = ur'"'
+dummy_word = '"'
 
 def tokenize(filename):
 	"""Tokenizing given text,\nTitles starts with tag: "##TITLE## "."""

@@ -12,7 +12,7 @@ import operator
 def status(s):
 	sys.stderr.write(s + "\r")
 
-dummy_word = ur'"'
+dummy_word = '"'
 
 def count_words(filename):
 	"""Scans through file of tokenized Wikipedia documents, counting distinct words."""
@@ -37,7 +37,7 @@ def count_words(filename):
 					dummy_words_count += 1
 		status('Processed {0} articles.\n'.format(i+1))
 
-	print "Our tokenizer distinguished {0} words with known characters and {1} with unknown. There were {2} distinct, correct words.".format(words_count, dummy_words_count, distinct_words)
+	sys.stderr.write("Our tokenizer distinguished {0} words with known characters and {1} with unknown. There were {2} distinct, correct words.".format(words_count, dummy_words_count, distinct_words))
 
 	words_sorted = sorted(words.iteritems(), key=operator.itemgetter(1))
 	for word, freq in words_sorted:
