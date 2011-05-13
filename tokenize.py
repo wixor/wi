@@ -1,18 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Mateusz Dereniowski
+# Mateusz Dereniowski, Wiktor Janas
 # Wyszukiwanie informacji lato 2011
 
 import sys, os
 from struct import pack
 import re
 import string
-try:
-	import tools
-	dummy_word = tools.dummy_word
-except ImportError:
-	dummy_word = r'"'
+
+dummy_word = ur'"'
 
 def tokenize(filename):
 	"""Tokenizing given text,\nTitles starts with tag: "##TITLE## "."""
@@ -21,8 +18,8 @@ def tokenize(filename):
 	word = ur"""a-zß-öø-ÿĀ-ſ"""
 	not_word = ur"""[^{0}]""".format(word) # ąęśćżźńółèüäéáúūōíñõ
 	unwanted_char = re.compile(ur"[^-{word}0-9.']".format(word=word), re.U)
-	#symbols = ur"""[,"!?:;@#$%^&*()+_=[\]{}\|<>/]"""
-	unwanted_symbol = re.compile(ur"(?:[^-{word}0-9.'])|(?:(?<={not_word})[-.'])|(?:[-.'](?={not_word}))|(?:^[-.'])|(?:[-.']$)".format(word=word, not_word=not_word), re.U)
+	symbol = ur"""[,"!?:;@#$%^&*()+_=[\]{}\|<>/]"""
+	unwanted_symbol = re.compile(ur"(?:{symbol})|(?:(?<={not_word})[-.'])|(?:[-.'](?={not_word}))|(?:^[-.'])|(?:[-.']$)".format(symbol=symbol, not_word=not_word), re.U)
 	parenthesis = re.compile(ur"[()]", re.U)
 
 	tytuly_count = 0
@@ -44,6 +41,7 @@ def tokenize(filename):
 				f_TITL.write(tytul.encode('utf8') + "\x00")
 				tytul = tytul.lower()
 				tytul = re.sub(parenthesis, ur"", tytul)
+				print tytul
 				f_TOKENS.write(' '.join((tytul.encode('utf8'), dummy_word)))
 			else:
 				line = line.lower()
