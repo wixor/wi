@@ -41,7 +41,7 @@ def count_words(filename):
 
 	words_sorted = sorted(words.iteritems(), key=operator.itemgetter(1))
 	for word, freq in words_sorted:
-		print word + '\t' + str(freq) + '\n'
+		print word + '\t' + str(freq)
 
 
 def main():
