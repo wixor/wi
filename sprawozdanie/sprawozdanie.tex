@@ -133,7 +133,7 @@ nie rośnie istotnie, zaś wyszukiwarka nie musi martwić się lematyzacją.
 Najwolniejszą operacją w systemie komputerowym jest przesuwanie głowicy
 dysku. Żądania odczytu generowane przez wyszukiwarkę są niestety bardzo
 rozproszone (listy pozycyjne odpowiadające termom w zapytaniu prawie
-nigdy nie znajdują się obok siebie). Przeto przez lwią część czas
+nigdy nie znajdują się obok siebie). Przeto przez lwią część czasu
 wyszukiwarka oczekuje na dane z dysku. Jest to okazja do optymalizacji:
 wyszukiwarka może zlecić wykonanie odczytów innemu wątkowi; kiedy tylko
 dostarczy on jakąś listę pozycyjną może ona przystąpić do jej przetwarzania,
@@ -246,6 +246,62 @@ jednak żaden term Wikipedii nie ,,aktywował'' ich).
 \paragraph{Oznaczanie stopwords} W gotowych plikach indeksu na każde
 \textit{stopword} nanoszony jest specjalny znacznik, który jest rozpoznawany
 przez wyszukiwarkę.
+
+\newpage
+
+\section{Testy}
+
+tokenizowanie:
+\begin{quote}
+i209116@odilon:/var/tmp/derenio/wi\$ /usr/bin/time python tokenize.py ../wikipedia\_dla\_wyszukiwarek.txt\\
+454.72user 1.10system 7:36.48elapsed 99\%CPU (0avgtext+0avgdata 734528maxresident)k\\
+16inputs+1691192outputs (0major+46131minor)pagefaults 0swaps\\
+\end{quote}
+
+\noindent
+sprawdzanie poprawności wygenerowanych tokenów:
+\begin{quote}
+i209116@odilon:/var/tmp/derenio/wi\$ /usr/bin/time python tests/check\_unwanted\_chars.py db/tokenized\\
+256.82user 0.34system 4:17.34elapsed 99\%CPU (0avgtext+0avgdata 29296maxresident)k\\
+0inputs+0outputs (0major+15363minor)pagefaults 0swaps\\
+\end{quote}
+
+\noindent
+zliczanie częstości tokenów:
+\begin{quote}
+i209116@odilon:/var/tmp/derenio/wi\$ /usr/bin/time python tests/words\_frequency.py db/tokenized $>$ db/words\_frequency\\
+Processed 811205 articles.\\
+Our tokenizer distinguished 118087969 words with known characters and 1436497 with unknown. There were 2733597\\ distinct, correct words.95.66user 0.53system 1:36.28elapsed 99\%CPU (0avgtext+0avgdata 1199968maxresident)k\\
+0inputs+68216outputs (0major+96218minor)pagefaults 0swaps\\
+\end{quote}
+
+\noindent
+zapytania and (5500):
+	łącznie 34870891 odpowiedzi, 694MiB
+\begin{quote}
+i209116@odilon:/var/tmp/derenio/wi\$ /usr/bin/time ./search $<$ ../pytania\_frazowe.txt \&$>$ odpowiedzi\_frazowe.txt\\
+12.25user 1.15system 0:13.64elapsed 98\%CPU (0avgtext+0avgdata 1072192maxresident)k\\
+736inputs+1419768outputs (1major+207147minor)pagefaults 0swaps\\
+\end{quote}
+
+\noindent
+zapytania or (5133)
+	łącznie 5314532 odpowiedzi, 103MiB
+\begin{quote}
+i209116@odilon:/var/tmp/derenio/wi\$ /usr/bin/time ./search $<$ ../pytania\_or\_dla\_IR.txt \&$>$ odpowiedzi\_or.txt\\
+7.75user 1.52system 0:11.83elapsed 78\%CPU (0avgtext+0avgdata 1072176maxresident)k\\
+23912inputs+210088outputs (3major+631398minor)pagefaults 0swaps\\
+\end{quote}
+zapytania frazowe (2741)
+	łącznie 5048 odpowiedzi, 221KiB
+\begin{quote}
+
+\noindent
+i209116@odilon:/var/tmp/derenio/wi\$ /usr/bin/time ./search $<$ ../pytania\_frazowe.txt \&$>$ odpowiedzi\_frazowe.txt\\
+1.43user 1.06system 0:02.37elapsed 105\%CPU (0avgtext+0avgdata 1072176maxresident)k\\
+0inputs+448outputs (0major+291631minor)pagefaults 0swaps\\
+\end{quote}
+
 \newpage
 
 \section{Na skróty}
@@ -253,24 +309,4 @@ przez wyszukiwarkę.
 	\item \texttt{./create-index.sh \textit{wikipedia morfologik stopwords}}
 \end{itemize}
 
-\newpage
-
-\section{Testy}
-
-tokenizowanie:
-\begin{verbatim}
-i209116@odilon:/var/tmp/derenio/wi$ /usr/bin/time python tokenize.py ../wikipedia_dla_wyszukiwarek.txt
-454.72user 1.10system 7:36.48elapsed 99%CPU (0avgtext+0avgdata 734528maxresident)k
-16inputs+1691192outputs (0major+46131minor)pagefaults 0swaps
-\end{verbatim}
-
-sprawdzanie poprawności wygenerowanych tokenów:
-\begin{verbatim}
-i209116@odilon:/var/tmp/derenio/wi$ /usr/bin/time python tests/check_unwanted_chars.py db/tokenized
-256.82user 0.34system 4:17.34elapsed 99%CPU (0avgtext+0avgdata 29296maxresident)k
-0inputs+0outputs (0major+15363minor)pagefaults 0swaps
-\end{verbatim}
-
-
 \end{document}
-

@@ -41,7 +41,6 @@ def tokenize(filename):
 				f_TITL.write(tytul.encode('utf8') + "\x00")
 				tytul = tytul.lower()
 				tytul = re.sub(parenthesis, ur"", tytul)
-				print tytul
 				f_TOKENS.write(' '.join((tytul.encode('utf8'), dummy_word)))
 			else:
 				line = line.lower()

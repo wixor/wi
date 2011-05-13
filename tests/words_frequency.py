@@ -5,8 +5,6 @@
 # Wyszukiwanie informacji lato 2011
 
 import sys
-import re
-import time
 import operator
 
 def status(s):
