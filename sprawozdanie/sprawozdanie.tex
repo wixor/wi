@@ -3,8 +3,9 @@
 \usepackage[polish]{babel}
 \usepackage{polski}
 \usepackage{amsmath}
-\usepackage{a4wide}
+%\usepackage{a4wide}
 \usepackage{url}
+\usepackage{caption}
 \pagestyle{plain}
 
 \makeatletter
@@ -21,6 +22,10 @@ Mateusz Dereniowski \thanks{\texttt{Mateusz.Dereniowski@gmail.com}}}
 
 \maketitle
 \thispagestyle{empty}
+
+\tableofcontents
+
+\newpage
 
 \section{O projekcie}
 Niniejsza praca dokumentuje projekt polegający na stworzeniu wyszukiwarki dla
@@ -40,31 +45,31 @@ zainstalować pakiet \texttt{libtalloc-dev}). Aby skompilować programy należy
 wydać polecenie \texttt{make} w katalogu z kodem źródłowym. Następnie można
 przystąpić do tworzenia indeksu: w tem celu należy wydać polecenie
 \texttt{./create-index.sh}, którego argumentami powinny być kolejno:
-ścieżka do tekstu Wikipedii, ścieżka do morfologika oraz ścieżka do pliku
+ścieżka do tekstu \textit{Wikipedii}, ścieżka do \textit{morfologika} oraz ścieżka do pliku
 \textit{stopwords} (uwaga: pliki te powinny mieć zakończenia linii w formacie
-UNIX; z dostarczonych materiałów plik \textit{stopwords} wymaga konwersji,
+UNIX (LF - Line feed, '\\n'); z dostarczonych materiałów plik \textit{stopwords} wymaga konwersji,
 można jej dokonać używając programu \texttt{fromdos}). Wraz z projektem
 dostarczony jest utworzony indeks. Wreszcie można uruchomić wyszukiwarkę
 wydając polecenie \texttt{./search}. Wyszukiwarka domyślnie pracuje w trybie
-wsdadowym: wczytuje zapytania ze standardowego wejścia i wypisuje wyniki na
+wsadowym: wczytuje zapytania ze standardowego wejścia i wypisuje wyniki na
 standardowe wyjście; można ją zatem przetestować używając polecenia
 \texttt{./search < queries.txt > answers.txt}. Wyszukiwarka posiada tryb
 interaktywny, aktywowany opcją \texttt{-v}. W trybie tym wyszukiwarka wypisuje
-zachęte do wprowadzenia zapytania oraz wiele informacji o przetwarzaniu.
+zachętę do wprowadzenia zapytania oraz wiele informacji o przetwarzaniu.
 Ponieważ w trybie interaktywnym wynikowa lista tytułów artykułów często jest
 zbędna, wyszukiwarka posiada również opcję \texttt{-r}, która wyłącza
 wypisywanie listy wyników (informacja o ilości trafień wciąż jest wypisywana).
 
 \section{Ciekawe rozwiązania zastosowane w projekcie}
 Wśród wielu standardowych rozwiązań zastosowanych w projekcie (parser zapytań,
-algorytmy obliczania sumy i iloczynu list postingowych) znalały się też takie,
+algorytmy obliczania sumy i iloczynu list postingowych) znalazły się też takie,
 które wydają się nam szczególnie ciekawe. Zostały one opisane poniżej.
 
 \subsection{Zamiana słów na liczby}
 Rozwiązanie problemu zamiany słów na liczby jest podstawową kwestią wymagającą
 rozwiązania w wyszukiwarce: operacje na słowach są nieefektywne, słowami nie
 można na przykład indeksować tablicy (,,tablica'' umożliwiająca taką operację
-jest w istocie słownikiem i czas dostępu do niej często jest niezadawalający).
+jest w istocie słownikiem i czas dostępu do niej często jest niezadowalający).
 Z jednej strony wejściem dla indeksera jest wielki zbiór słów, z drugiej strony
 wyszukiwarka powinna możliwie błyskawicznie parsować zapytanie.
 
@@ -152,7 +157,7 @@ z dysku wszystkich zażądanych list.
 Inną możliwą do wykonania optymalizacją jest zażądanie od systemu odczytu
 \textit{wielu} list jednocześnie. Należy przypuszczać, że spowodowałoby
 to znaczny spadek czasu odczytu z dysku, gdyż system mógłby wysłać wiele
-żądań do dysku, ten zaś mógłby zoptymalizować trasę głowicy nad tależami
+żądań do dysku, ten zaś mógłby zoptymalizować trasę głowicy nad talerzami
 (mechanizmy takie istnieją i są wykorzystywane w zaawansowanych aplikacjach).
 Tej optymalizacji jednak nie zaimplementowano.
 
@@ -194,8 +199,13 @@ pośrednich.
 \paragraph{Tokenizacja Wikipedii} Dostarczone dane wejściowe są zamieniane
 na format, w którym każdy artykuł jest zapisany w jednej linii składającej się
 z kolejnych słów występujących w artykule oddzielonych spacjami. Na tym etapie
-usuwane są wszystkie zbędne znaki, dokonywana jest zamianana liter na małe
-oraz formowane są termy. Na tym etapie powstaje również lista tytułów
+usuwane są wszystkie zbędne znaki, dokonywana jest zamiana liter na małe
+oraz formowane są termy.
+\footnote{Tokeny, które zawierają znaki różne od liter alfabetu łacińskiego,
+rozszerzonego o~ich wszystkie odpowiedniki ze znakami diakrytycznymi, uznawane
+są za niepoprawne termy i~zastępowane cudzysłowem (``) w~celu uwzględnieniach
+ich pozycji w~tekście.}
+Na tym etapie powstaje również lista tytułów
 artykułów (plik \texttt{TITL}).
 
 \paragraph{Tworzenie korpusu} Na podstawie ztokenizowanej wikipedii oraz
@@ -210,7 +220,7 @@ wersja morfologika: zawiera ona takie same informacje, jak zwykły morfologik
 jednak jest prostsza w obsłudze, ponieważ wszystkie termy zamienione zostają
 na ich identyfikatory. Ponadto morfologik zostaje uzupełniony o słowa
 znajdujące się w korpusie, a nie znajdujące się w oryginalnym morfologiku:
-dla słow tych przyjmuje się, że są one swoją postacią bazową.
+dla słów tych przyjmuje się, że są one swoją postacią bazową.
 
 \paragraph{Wykrywanie aliasów} Na podstawie binarnego morfologika tworzona
 jest baza aliasów: dla każdego termu określane jest, czy powinien on mieć
@@ -223,17 +233,17 @@ oraz bazy aliasów tworzony jest graf lematyzacji: dla każdego termu budowana
 jest lista termów, których listy lematyzowane powinny zawierać jego
 wystąpienia. Na listę tą trafiają jedynie te termy, które nie są aliasami.
 
-\paragraph{Digitizacja} Ztokenizowana Wikipedia zamieniana jest na format
-binarny, to znaczy kolejne tokeny zamieniane są na trójki (\texttt{id\_tokenu},
+\paragraph{Digitalizacja} Ztokenizowana Wikipedia zamieniana jest na format
+binarny, to znaczy kolejne tokeny zamieniane są na trójki (\texttt{id\_tokena},
 \texttt{nr\_dokumentu}, \texttt{nr\_słowa\_w\_dokumencie}), gdzie wartość
-\texttt{id\_tokenu} wyznaczana jest przez korpus.
+\texttt{id\_tokena} wyznaczana jest przez korpus.
 
-\paragraph{Lematyzacja} Na postawie zdigitizowanej Wikipedii oraz grafu
-lematyzacji przeprowadzana jest lematyzacja: każdy term zdigitizowanej
+\paragraph{Lematyzacja} Na postawie zdigitalizowanej Wikipedii oraz grafu
+lematyzacji przeprowadzana jest lematyzacja: każdy term zdigitalizowanej
 Wikipedii jest zamieniany na te termy, których listy lematyzowane powinny
 złapać jego wystąpienie.
 
-\paragraph{Odwracanie} Zdigitizowana Wikipedia oraz zlematyzowana Wikipedia
+\paragraph{Odwracanie} Zdigitalizowana Wikipedia oraz zlematyzowana Wikipedia
 są sortowane leksykograficznie, przez co powstają zaczątki indeksu odwróconego.
 
 \paragraph{Tworzenie indeksów i słownika} Na podstawie korpusu oraz indeksów
@@ -249,64 +259,183 @@ przez wyszukiwarkę.
 
 \newpage
 
-\section{Testy}
+\section{Testowanie}
 
-tokenizowanie:
-\begin{quote}
-i209116@odilon:/var/tmp/derenio/wi\$ /usr/bin/time python tokenize.py ../wikipedia\_dla\_wyszukiwarek.txt\\
-454.72user 1.10system 7:36.48elapsed 99\%CPU (0avgtext+0avgdata 734528maxresident)k\\
-16inputs+1691192outputs (0major+46131minor)pagefaults 0swaps\\
-\end{quote}
+\subsection{Środowisko uruchomieniowe}
 
-\noindent
-sprawdzanie poprawności wygenerowanych tokenów:
-\begin{quote}
-i209116@odilon:/var/tmp/derenio/wi\$ /usr/bin/time python tests/check\_unwanted\_chars.py db/tokenized\\
-256.82user 0.34system 4:17.34elapsed 99\%CPU (0avgtext+0avgdata 29296maxresident)k\\
-0inputs+0outputs (0major+15363minor)pagefaults 0swaps\\
-\end{quote}
+Poniższe testy zostały przeprowadzone na laptopie wyposażonym w:
+\begin{itemize}
+	\item procesor: Core 2 Duo 2.0Ghz 4MB cache
+	\item pamięć: 2 GB DDR2 667MHz
+	\item dysk: 5400RPM 8MB cache
+	\item system operacyjny: Gentoo
+	\item platforma: x86\_64-pc-linux\dywiz gnu
+	\item pendrive ze średnim czasem odczytu ~28MB/s
+\end{itemize}
+Każdy wynik stanowi średnią arytmetyczną całkowitego czasu działania programu
+z~trzech pomiarów, zaokrągloną do sekund.
+\footnote{do pomiaru czasu użyty został program \texttt{GNU time}}
 
-\noindent
-zliczanie częstości tokenów:
+Przed każdym uruchomieniem wyszukiwarki wykonywane było polecenie:
 \begin{quote}
-i209116@odilon:/var/tmp/derenio/wi\$ /usr/bin/time python tests/words\_frequency.py db/tokenized $>$ db/words\_frequency\\
-Processed 811205 articles.\\
-Our tokenizer distinguished 118087969 words with known characters and 1436497 with unknown. There were 2733597\\ distinct, correct words.95.66user 0.53system 1:36.28elapsed 99\%CPU (0avgtext+0avgdata 1199968maxresident)k\\
-0inputs+68216outputs (0major+96218minor)pagefaults 0swaps\\
+	echo 3 $>$ /proc/sys/vm/drop\_caches
 \end{quote}
+w~celu wyczyszczenia systemowego buforu. Dzięki powyższemu wszystkie czasy zawarte
+w~raporcie uwzględniają całkowity rozruch wyszukiwarki. Dodatkowym plusem
+wyczyszczenia bufora podręcznego dla plików jest poprawa wiarygodności
+pomiarów, które w~przeciwnym wypadku byłyby zaburzona za sprawą plików
+zbuforowanych podczas poprzednich wyszukiwań.
 
-\noindent
-zapytania and (5500):
-	łącznie 34870891 odpowiedzi, 694MiB
-\begin{quote}
-i209116@odilon:/var/tmp/derenio/wi\$ /usr/bin/time ./search $<$ ../pytania\_frazowe.txt \&$>$ odpowiedzi\_frazowe.txt\\
-12.25user 1.15system 0:13.64elapsed 98\%CPU (0avgtext+0avgdata 1072192maxresident)k\\
-736inputs+1419768outputs (1major+207147minor)pagefaults 0swaps\\
-\end{quote}
+\subsection{Generowanie indeksów}
 
-\noindent
-zapytania or (5133)
-	łącznie 5314532 odpowiedzi, 103MiB
-\begin{quote}
-i209116@odilon:/var/tmp/derenio/wi\$ /usr/bin/time ./search $<$ ../pytania\_or\_dla\_IR.txt \&$>$ odpowiedzi\_or.txt\\
-7.75user 1.52system 0:11.83elapsed 78\%CPU (0avgtext+0avgdata 1072176maxresident)k\\
-23912inputs+210088outputs (3major+631398minor)pagefaults 0swaps\\
-\end{quote}
-zapytania frazowe (2741)
-	łącznie 5048 odpowiedzi, 221KiB
-\begin{quote}
+\paragraph{Tokenizacja}
+Pierwszym krokiem na drodze do wygenerowania wszystkich, niezbędnych dla
+wyszukiwarki, indeksów jest tokenizacja pliku wikipedii. Jej całkowity czas
+działania nieznacznie przekracza 12 minut, co wynika z~faktu, iż wymagane jest
+dekodowanie pliku do \textit{UTF-8} w~celu prawidłowego rozpoznawania
+wszystkich znaków.
+\marginpar{\textbf{tokenizacja: około 12 minut}}
+\footnote{Czas tokenizacji wikipedii na komputerze z~pracowni numer 7 (Intel
+Core i3 CPU 3.07GHz, 4GB ramu, Ubuntu, i686-linux-gnu) wynosi około 7:30
+minuty}
 
-\noindent
-i209116@odilon:/var/tmp/derenio/wi\$ /usr/bin/time ./search $<$ ../pytania\_frazowe.txt \&$>$ odpowiedzi\_frazowe.txt\\
-1.43user 1.06system 0:02.37elapsed 105\%CPU (0avgtext+0avgdata 1072176maxresident)k\\
-0inputs+448outputs (0major+291631minor)pagefaults 0swaps\\
-\end{quote}
+\paragraph{Generowanie indeksów}
+Ta część przetwarzania ztokenizowanej wikipedii zajmuje niewiele ponad 19
+minut, z~czego najwięcej czasu zabiera proces \textbf{odwracania}, czyli
+sortowania tymczasowych list zdigitalizowanej wikipedii rozszerzonej
+o~lematyzację.
+\marginpar{\textbf{indeksy: około 19 minut}}
+\footnote{Czas generowania indeksów przebiega zdecydowanie szybciej na
+komputerach z~pracowni numer 7 - około 3:30 minuty - czego główną przyczyną
+jest spora ilość pamięci ram, która umożliwia systemowi operacyjnemu efektywne
+buforowanie plików pośrednich.}
+
+\subsection{Czas rozruchu}
+
+Czas potrzebny wyszukiwarce na rozruch, wynoszący około 7,5 sekundy, wynika
+głównie z~ potrzebny wczytania plików zawierających listę wszystkich tytułów
+artykułów oraz listę wszystkich słów pozyskanych z~wikipedii i~morfologika wraz
+z~długościami, a~także pozycjami w~plikach indeksów, ich list postingowych
+i~lematyzacyjnych\footnote{pliki \texttt{db/artitles} - 15,4MB,
+\texttt{db/dictionary} - 70,5MB}.
+Wyszukiwarka podczas swojego działania zajmuje około 250MB pamięci
+operacyjnej.
+\marginpar{\textbf{rozruch: około 7,5~sek}}
+
+\subsection{Czasy dla dostarczonych testów}
+
+W~procesie testowania wyszukiwarki sprawdziło się przypuszczenie, iż (przy
+założeniu trzymania indeksów na dysku) to właśnie czas potrzebny głowicy na
+przemieszczanie się nad odległymi sektorami stanie się wąskim gardłem
+całego programu\footnote{Chociaż indeksy łącznie zajmują niecałe 490MB
+i~w~całości mogłyby zmieścić się w~pamięci operacyjnej.}. Z~tego też powodu
+zostały przeprowadzone testy z~plikami indeksów umieszczonymi na pendrive-ie,
+aby sprawdzić stopień przyspieszenia wyszukiwania wynikający ze stałego czasu
+dostępu do sektora w~przypadku pamięci typu \textit{flash}.
+
+\begin{center}
+	\begin{table}
+		\begin{tabular}[c]{| l || r | r | r |}
+		\hline
+		pytania: & and & or & frazowe \\ \hline \hline
+		ilość pytań & 5500 & 5133 & 2741 \\ \hline
+		łączna liczba odpowiedzi & 34790744 & 5306339 & 5037 \\ \hline
+		wielkość pliku odpowiedzi & 694MB & 103MB & 221KB \\
+		\hline
+		\end{tabular}
+		\caption{Wielkość wyników dla dostarczonych zapytań.}
+	\end{table}
+\end{center}
+
+\begin{center}
+	\begin{table}
+		\begin{tabular}[c]{| l || c | c | c |}
+		\hline
+		pytania: & and & or & frazowe \\ \hline \hline
+		czasy dla: & \multicolumn{3}{|l|}{} \\ \hline
+		dysk, zapis & 0:52 & 1:06 & 1:04 \\ \hline
+		pendrive, zapis & 0:33 & 0:16 & 0:12 \\
+		dysk, bez zapisu & 0:21 & 0:55 & 1:04 \\ \hline
+		pendrive, bez zapisu & 0:18 & 0:15 & 0:12 \\
+		\hline
+		\end{tabular}
+		\caption{Czasy działania wyszukiwarki dla dostarczonych zapytań
+		wyrażane w~sekundach.  Wiersze ``bez zapisy'' oznaczają, iż
+		wyszukiwarka została uruchomiona w~trybie \texttt{search -r}
+		i~wyświetlała tylko podsumowanie liczby znalezionych artykułów dla
+		każdego zapytania. Wiersz ``dysk, zapis'' oznacza, iż pełne dane
+		zostały przekierowane do pliku.}
+	\end{table}
+\end{center}
+
+\subsection{Wnioski dotyczące czasów}
+Z~pomiaru czasów wyszukiwania przeprowadzonych z~przekierowaniem wyników do
+pliku, jak i~bez niego widać wyraźnie, iż sekwencyjny charakter pracy dysku
+w~połączeniu z~potrzebą przeplatania odczytów oraz zapisów w~znaczącym stopniu
+wydłuża całkowity czas działania programu. Jeśli natomiast przyjrzymy się
+czasom działania zmierzonym dla wyszukiwarki bez zapisywania wyników do pliku,
+możemy dostrzec przewagę stałego czasu dostępu pendrive-a nad dyskiem, która najwydatniej ukazuje
+się w~przypadku zapytań \textit{frazowych} oraz \textit{``or''}. Po
+zminimalizowaniu czasu potrzebnego na pozyskanie (rozrzuconych po pliku) odpowiednio list pozycyjnych
+i~ postingowych, widoczna zaczyna być praca \texttt{optymalizatora} zapytań.
 
 \newpage
 
-\section{Na skróty}
+\section{Instrukcja uruchomienia}
+
+W~celu skompilowania wszystkich potrzebnych programów, należy w~katalogu
+z~plikami źródłowymi wydać polecenie:
+\begin{itemize}
+	\item \texttt{make}
+\end{itemize}
+
+Następnie należy wykonać poniższy skrypt, który wygeneruje wszystkie potrzebne
+indeksy (może zająć ponad 30 minut):
 \begin{itemize}
 	\item \texttt{./create-index.sh \textit{wikipedia morfologik stopwords}}
 \end{itemize}
 
+Aby przystąpić do wyszukiwania w trybie interaktywnym należy wykonać następujące
+polecenie:
+\begin{itemize}
+	\item \texttt{./search -v [-r]}
+\end{itemize}
+Wyświetlony zostanie znak zachęty, a każde zapytanie zostanie wzbogacone
+o~informacje na temat jego przetwarzania. Opcjonalny parametr \texttt{``-r''}
+sprawia, iż wyświetlane zostają jedynie podsumowania wyników.
+\linebreak
+\linebreak
+Aby uruchomić wyszukiwarkę w~trybie wsadowym, należy przekierować żądany plik
+na standardowe wejście programu, a~w~celu zachowania wyników, przekierować jego
+standardowe wyjście do pliku przeznaczonego na odpowiedzi:
+\begin{itemize}
+	\item \texttt{./search $<$ zapytania.txt $>$ odpowiedzi.txt[-r]}
+\end{itemize}
+
+\newpage
+
+\section{Pliki}
+
+Katalog \textbf{db/}:
+\begin{itemize}
+	\item \texttt{tokenized} - ztokenizowany plik wikipedii,
+	\item \texttt{artitles} - nazwy tytułów wikipedii,
+	\item \texttt{dictionary} - lista słów wraz z~pozycjami ich list w~plikach
+		indeksów,
+	\item \texttt{lemmatized} - indeks lematyzowany,
+	\item \texttt{positional} - indeks pozycyjny
+\end{itemize}
+
+\noindent
+Pozostałe katalogi:
+\begin{itemize}
+	\item \texttt{wiki\_dane/} - pliki wikipedii, morfologika oraz stopwords,
+	\item \texttt{pytania/} - pliki z~zadanymi zapytaniami,
+	\item \texttt{odpowiedzi/} - pliki z~odpowiedziami na zadane zapytania,
+	\item \texttt{czasy/} - informacje o~czasach wyszukiwania, z~programu
+		\texttt{GNU time}, dla zadanych zapytań,
+	\item \texttt{tests/} - skrypty służące sprawdzaniu wyszukiwarki
+\end{itemize}
+
 \end{document}
+
