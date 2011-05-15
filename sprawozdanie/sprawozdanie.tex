@@ -354,7 +354,7 @@ dostępu do sektora w~przypadku pamięci typu \textit{flash}.
 		pytania: & and & or & frazowe \\ \hline \hline
 		czasy dla: & \multicolumn{3}{|l|}{} \\ \hline
 		dysk, zapis & 0:52 & 1:06 & 1:04 \\ \hline
-		pendrive, zapis & 0:33 & 0:16 & 0:12 \\
+		pendrive, zapis & 0:33 & 0:16 & 0:12 \\ \hline
 		dysk, bez zapisu & 0:21 & 0:55 & 1:04 \\ \hline
 		pendrive, bez zapisu & 0:18 & 0:15 & 0:12 \\
 		\hline
@@ -374,10 +374,47 @@ pliku, jak i~bez niego widać wyraźnie, iż sekwencyjny charakter pracy dysku
 w~połączeniu z~potrzebą przeplatania odczytów oraz zapisów w~znaczącym stopniu
 wydłuża całkowity czas działania programu. Jeśli natomiast przyjrzymy się
 czasom działania zmierzonym dla wyszukiwarki bez zapisywania wyników do pliku,
-możemy dostrzec przewagę stałego czasu dostępu pendrive-a nad dyskiem, która najwydatniej ukazuje
-się w~przypadku zapytań \textit{frazowych} oraz \textit{``or''}. Po
-zminimalizowaniu czasu potrzebnego na pozyskanie (rozrzuconych po pliku) odpowiednio list pozycyjnych
-i~ postingowych, widoczna zaczyna być praca \texttt{optymalizatora} zapytań.
+możemy dostrzec przewagę stałego czasu dostępu pendrive-a nad dyskiem, która
+najwydatniej ukazuje się w~przypadku zapytań \textit{frazowych} oraz
+\textit{``or''}. Po zminimalizowaniu czasu potrzebnego na pozyskanie
+(rozrzuconych po pliku) odpowiednio list pozycyjnych i~ postingowych, widoczna
+zaczyna być praca \texttt{optymalizatora} zapytań. 
+
+\subsection{Własne testy}
+W~katalogu \texttt{/tests} znajdują się trzy skrypty umożliwiające automatyczne
+testowanie. Pierwszym z~nich jest \texttt{tests/check\_unwanted\_chars.py}, którego
+zadaniem jest sprawdzenie poprawności procesu tokenizacji, w~szczególności
+odrzucania słów z~niepożądanymi znakami.\\
+Drugi skrypt \texttt{tests/generate\_tests.py} umożliwia automatyczne
+sprawdzanie wyników wyszukiwania dla losowo wybranych słów z~pliku\\
+\texttt{db/words\_frequency\_per\_article.py}.\\
+Ostatni skrypt \texttt{tests/words\_frequency.py} generuje, na bazie
+ztokenizowanej wikipedii, dwa pliki:
+\begin{itemize}
+	\item \texttt{db/words\_frequency} - plik zawierający częstości wystąpień
+		słów w~całej wikipedii
+	\item \texttt{db/words\_frequency\_per\_article} - plik zawierający ilość
+		dokumentów, w~których wystąpiło dane słowo
+\end{itemize}
+Znając liczbę wystąpień najczęstszych jak i~najrzadszych słów, możliwe było
+przetestowanie \textbf{optymalizatora zapytań} pod względem optymalizacji ich
+przetwarzania:
+\begin{verbatim}
+QUERY: w TOTAL: 512249
+--- total time: 142.162 ms wall / 5.625 ms cpu
+
+QUERY: i TOTAL: 380522
+--- total time: 42.983 ms wall / 3.603 ms cpu
+
+QUERY: na TOTAL: 338713
+--- total time: 50.278 ms wall / 5.845 ms cpu
+
+QUERY: tzu-chung TOTAL: 1
+--- total time: 0.221 ms wall / 0.224 ms cpu
+
+QUERY: tzu-chung w i na TOTAL: 1
+--- total time: 57.140 ms wall / 12.975 ms cpu
+\end{verbatim}
 
 \newpage
 
@@ -424,11 +461,15 @@ Katalog \textbf{db/}:
 		indeksów,
 	\item \texttt{lemmatized} - indeks lematyzowany,
 	\item \texttt{positional} - indeks pozycyjny
+	\item \texttt{words\_frequency} - plik zawierający listę wszystkich tokenów
+	\item \texttt{words\_frequency\_per\_article} - plik zawierający listę
+		wszystkich tokenów, wraz z~liczbą artykułów, w~których wystąpiły
 \end{itemize}
 
 \noindent
 Pozostałe katalogi:
 \begin{itemize}
+	\item \texttt{sprawozdanie} - pliki źródłowe \texttt{LaTex} sprawozdania
 	\item \texttt{wiki\_dane/} - pliki wikipedii, morfologika oraz stopwords,
 	\item \texttt{pytania/} - pliki z~zadanymi zapytaniami,
 	\item \texttt{odpowiedzi/} - pliki z~odpowiedziami na zadane zapytania,
