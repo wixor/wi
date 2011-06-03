@@ -7,6 +7,8 @@ Oznaczenia:
         koduje każdy kawałek jako jeden bajt z najwyższym bitem ustawionym
         dla oznaczenia wszystkich kawałków poza ostatnim; kawałki są
         kodowane od najstarszego do najmłodszego.
+    float:
+        float (ieee 754)
     utf8:
         napis w utf-8
     utf8z:
@@ -136,9 +138,11 @@ u64[]: ciąg symboli, gdzie każdy symbol składa się z:
 
 u32: magiczna liczba ('TITL')
 u32: ilość artykułów
+float[]: pageranki artykułów
+u16[]: ilości termów w artykułach
 utf8z[]: tytuły artykułów
 
-Rozmiar pliku: około 7.5MB. Struktura przewidziana do wczytania wszystkiego
+Rozmiar pliku: około 20MB. Struktura przewidziana do wczytania wszystkiego
 do pamięci (stąd brak prostego dostępu do n-tego dokumentu).
 
 --------------------------------------------------------------------------------
@@ -151,6 +155,7 @@ u8[]: ilość słów w kubełku
 dla każdego kubełka:
     dla każdego słowa:
         u24: numer listy lematyzowanej
+        u16: ilość dokumentów zawierających term
         u8: długość słowa na dolnych 7 bitach,
             ósmy bit ustawiony oznacza stopword
 dla każdej listy pozycyjnej:
@@ -162,11 +167,11 @@ dla każdej listy lematyzowanej:
 dla każdego słowa:
     utf8: słowo
 
-Rozmiar pliku: nie wiadomo, może 50MB, może 100MB. Struktura zrobiona tak, aby
-można było wczytać całość do pamięci. Kolejność słów wyznacza kolejność w
-indeksie pozycyjnym (ale nie w lematyzowanym), gdzie każde słowo ma swoją
-własną listę. W indeksie lematyzowanym listy mogą być współdzielone, to znaczy
-wiele słów może wskazywać na tą samą listę.
+Rozmiar pliku: około 150MB. Struktura zrobiona tak, aby można było wczytać
+całość do pamięci. Kolejność słów wyznacza kolejność w indeksie pozycyjnym
+(ale nie w lematyzowanym), gdzie każde słowo ma swoją własną listę. W indeksie
+lematyzowanym listy mogą być współdzielone, to znaczy wiele słów może wskazywać
+na tą samą listę.
 
 --------------------------------------------------------------------------------
 3. INDEKS LEMATYZOWANY
@@ -174,7 +179,10 @@ wiele słów może wskazywać na tą samą listę.
 u32: magiczna liczba ('IDXL')
 dla każdego słowa:
     u24: pierwszy dokument
-    uv[]: różnice między numerami dokumentów
+    uv: ilość wystąpień termu w pierwszym dokumencie
+    dla każdego kolejnego dokumentu:
+        uv: różnica między numerami kolejnych dokumentów
+        uv: ilość wystąpień termu w dokumencie
 
 --------------------------------------------------------------------------------
 4. INDEKS POZYCYJNY
