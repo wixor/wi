@@ -4,7 +4,7 @@ CPPFLAGS := -D_FILE_OFFSET_BITS=64 -DNDEBUG
 CXXFLAGS := -O3 -g -pthread -march=native -Wall
 LDFLAGS := -pthread -ltalloc -lrt -lstdc++
 
-all: search dump-word corpus-test dedigitize digitize invert lemmatize make-aliases make-binmorfo make-corpus make-index make-mosquare mark-stop
+all: search dump-word corpus-test dedigitize digitize invert lemmatize make-aliases make-binmorfo make-corpus make-index make-mosquare mark-stop make-tfidf
 
 search: search.o common.o
 dump-word: dump-word.o common.o 
@@ -20,12 +20,13 @@ make-binmorfo: make-binmorfo.o corpus.o common.o
 make-corpus: make-corpus.o corpus.o common.o
 make-index: make-index.o corpus.o common.o
 make-mosquare: make-mosquare.o common.o
+make-tfidf: make-tfidf.o corpus.o common.o
 
 common.o: term.o fileio.o bufrw.o
 	$(LD) -r $^ -o $@
 
 clean:
-	rm -f *.o search dump-word mark-stop corpus-test dedigitize digitize invert lemmatize make-aliases make-binmorfo make-corpus make-index make-mosquare mark-stop
+	rm -f *.o search dump-word mark-stop corpus-test dedigitize digitize invert lemmatize make-aliases make-binmorfo make-corpus make-index make-mosquare mark-stop make-tfidf
 
 Makefile.deps: $(wildcard *.h *.c *.cpp)
 	$(CXX) -MM $(filter %.c %.cpp, $^) > $@
