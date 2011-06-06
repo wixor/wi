@@ -1,11 +1,7 @@
 #include <stdio.h>
 #include "fileio.h"
 #include "corpus.h"
-
-/* term id: 25 bits -- up to 32 mln terms (real: ??)
- * document id: 20 bits -- up to 1 mln documents (real: 800 k)
- * offset in document: 19 bits -- up to .5 mln terms/document (real max: 50 k)
- */
+#include "rawpost.h"
 
 int main(int argc, char *argv[])
 {
@@ -20,13 +16,11 @@ int main(int argc, char *argv[])
                    *end = (const uint64_t *)fmap.end();
     while(p < end)
     {
-        uint64_t x = *p++;
-        int term_off = (x >> 0)  & ((1<<19) - 1),
-            doc_id   = (x >> 19) & ((1<<20) - 1),
-            term_id  = (x >> 39) & ((1<<25) - 1);
+        rawpost x(*p++);
         char term_text[256+16];
-        corp.lookup(term_id, term_text, sizeof(term_text));
-        printf("term '%s', id %d, doc %d, offs %d\n", term_text, term_id, doc_id, term_off);
+        corp.lookup(x.term_id(), term_text, sizeof(term_text));
+        printf("term '%s', id %d, doc %d, offs %d\n",
+                term_text, x.term_id(), x.doc_id(), x.term_off());
     }
 
     return 0;

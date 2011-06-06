@@ -5,6 +5,7 @@ extern "C" {
 #include "bufrw.h"
 #include "fileio.h"
 #include "corpus.h"
+#include "rawpost.h"
 
 struct term {
     int id;
@@ -25,20 +26,15 @@ static void seek_until(int id, Reader *rd)
     while(!rd->eof())
     {
         size_t save = rd->tell();
-        uint64_t e = rd->read_u64();
+        rawpost e(rd->read_u64());
 
-        int term_id = e >> 39;
-        if(term_id < id)
+        if(e.term_id() < id)
             continue;
         rd->seek(save);
         break;
     }
 }
 
-/* term id: 25 bits -- up to 32 mln terms (real: ??)
- * document id: 20 bits -- up to 1 mln documents (real: 800 k)
- * offset in document: 19 bits -- up to .5 mln terms/document (real max: 50 k)
- */
 static bool write_lemmatized(struct term *term, Reader *rd, const FileIO &fio)
 {
     seek_until(term->id, rd);
@@ -49,22 +45,20 @@ static bool write_lemmatized(struct term *term, Reader *rd, const FileIO &fio)
     while(!rd->eof())
     {
         size_t save = rd->tell();
-        uint64_t e = rd->read_u64();
+        rawpost e(rd->read_u64());
 
-        int term_id = e >> 39;
-        if(term_id > term->id) {
+        if(e.term_id() > term->id) {
             rd->seek(save);
             break;
         }
 
-        int doc_id = (e>>19)  & 0xfffff;
-        if(doc_id == last_doc_id)
+        if(e.doc_id() == last_doc_id)
             continue;
         if(last_doc_id == -1) 
-            wr.write_u24(doc_id);
+            wr.write_u24(e.doc_id());
         else
-            wr.write_uv(doc_id - last_doc_id);
-        last_doc_id = doc_id;
+            wr.write_uv(e.doc_id() - last_doc_id);
+        last_doc_id = e.doc_id();
         n_entries++;
     }
 
@@ -91,38 +85,33 @@ static bool write_positional(struct term *term, Reader *rd, const FileIO &fio)
     while(!rd->eof())
     {
         size_t save = rd->tell();
-        uint64_t e = rd->read_u64();
+        rawpost e(rd->read_u64());
 
-        int term_id = e >> 39;
-        if(term_id > term->id) {
+        if(e.term_id() > term->id) {
             rd->seek(save);
             break;
         }
 
-        int doc_id = (e>>19)  & 0xfffff;
-        int pos = e & 0x7ffff;
-
-        if(doc_id == last_doc_id) {
-            poswr.write_uv(pos - last_pos);
-            last_pos = pos;
+        if(e.doc_id() == last_doc_id) {
+            poswr.write_uv(e.term_pos() - last_pos);
+            last_pos = e.term_pos();
             continue;
         }
 
         if(last_doc_id == -1) { 
-            docswr.write_u24(doc_id);
+            docswr.write_u24(e.doc_id());
             pos_start = poswr.tell();
-            poswr.write_uv(pos);
-            last_pos = pos;
-        }
-        else {
+            poswr.write_uv(e.term_pos());
+            last_pos = e.term_pos();
+        } else {
             docswr.write_uv(poswr.tell() - pos_start);
-            docswr.write_uv(doc_id - last_doc_id);
+            docswr.write_uv(e.doc_id() - last_doc_id);
             pos_start = poswr.tell();
-            poswr.write_uv(pos);
-            last_pos = pos;
+            poswr.write_uv(e.term_pos());
+            last_pos = e.term_pos();
         }
 
-        last_doc_id = doc_id;
+        last_doc_id = e.doc_id();
         n_entries++;
     }
     if(last_doc_id != -1) 
