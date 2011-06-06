@@ -182,7 +182,7 @@ u8[]: ilość słów w kubełku
 dla każdego kubełka:
     dla każdego słowa:
         u24: numer listy lematyzowanej
-        u16: ilość dokumentów zawierających term
+        u24: ilość dokumentów zawierających term
         u8: długość słowa na dolnych 7 bitach,
             ósmy bit ustawiony oznacza stopword
 dla każdej listy pozycyjnej:
