@@ -133,6 +133,33 @@ u64[]: ciąg symboli, gdzie każdy symbol składa się z:
         - 20 bitów: id dokumentu
         - 19 bitów: offset termu w dokumencie (lsb)
 
+... 0c. Plik aliasów:
+
+u32: magiczna liczba ('ALIA')
+u32: ilość słów
+u32[]: tablica aliasów słów
+
+... 0d. Plik binarnego morfologika:
+
+u32: magiczna liczba ('MORF')
+u32: ilość słów
+dla każdego słowa:
+    u32: id słowa na dolnych 24 bitach, ilość baz na górnych 8 bitach
+    u32[]: id kolejnych baz słowa
+
+... 0e. Plik term-frequency:
+
+u64[]: ciąg symboli, gdzie każdy symbol składa się z:
+        - 25 bitów: id termu według korpusu (msb)
+        - 20 bitów: id dokumentu
+        - 19 bitów: ilość wystąpień termu w dokumencie
+
+... 0f. Plik inverse-document-frequency:
+
+u32: magiczna liczba ('IDFR')
+u32: ilość termów
+u32[]: dla każdego termu, ilość dokumentów, w których występuje
+
 --------------------------------------------------------------------------------
 1. TYTUŁY ARTYKUŁÓW
 
