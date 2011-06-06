@@ -48,12 +48,17 @@ double Timer::end()
 class Artitles
 {
     void *memctx;
+    float *pageranks;
+    uint16_t *term_counts;
     char **titles;
+
 public:
     Artitles();
     ~Artitles();
     void read(const char *filename);
-    inline const char *lookup(int key) const { return titles[key]; }
+    inline const char *getTitle(int key) const { return titles[key]; }
+    inline int *getTermCount(int key) const { return term_counts[key]; }
+    inline float *getPageRank(int key) const { return pageranks[key]; }
 };
 
 Artitles::Artitles() {
@@ -77,22 +82,31 @@ void Artitles::read(const char *filename)
 
     FileIO fio(filename, O_RDONLY);
     
-    off_t size = fio.seek(0, SEEK_END);
-    char *data = (char *)fio.read_raw_alloc(size, 0);
-    talloc_steal(memctx, data);
+    int n_articles;
+    { uint32_t hdr[2];
+      fio.read_raw(hdr, sizeof(hdr));
+      if(hdr[0] != 0x4c544954) abort();
+      n_articles = hdr[1];
+    }
 
-    fio.close();
-
-    Reader rd(data, size);
-    
-    if(rd.read_u32() != 0x4c544954) abort();
-    int n_articles = rd.read_u32();
+    pageranks = (float *)fio.read_raw_alloc(sizeof(float)*n_articles);
+    term_counts = (uint16_t *)fio.read_raw_alloc(sizeof(uint16_t)*n_articles);
+    off_t offs = fio.tell(), end = fio.seek(0, SEEK_END);
+    char *title_texts = (char *)fio.read_raw_alloc(end-offs, offs),
+         *title_texts_end = title_texts + (end-offs);
+    talloc_steal(memctx, pageranks);
+    talloc_steal(memctx, term_counts);
+    talloc_steal(memctx, title_texts);
 
     titles = talloc_array(memctx, char *, n_articles);
     assert(titles);
+
     for(int i=0; i<n_articles; i++) {
-        titles[i] = data + rd.tell();
-        rd.seek_past('\0');
+        titles[i] = title_texts;
+        title_texts =
+            (char *)memchr(title_texts, '\0', title_texts_end - title_texts);
+        assert(title_texts);
+        title_texts++;
     }
 
     info("article titles read in %.03lf seconds.\n", timer.end());
@@ -113,13 +127,15 @@ class Dictionary
 
     struct Term {
         int lemmatized_list_id;
-        short text_length;
-        bool stop;
-        char *text;
+        char *text; /* the actual word */
+        int idf; /* how many documents contain this term */
+        short text_length; /* how long is the word (bytes) */
+        bool stop; /* if the term is a stopword */
     };
 
     void *memctx;
 
+    int term_count;
     TermHasher hasher;
     PostingList *lemmatized, *positional;
     Term *terms, **buckets;
@@ -151,9 +167,11 @@ public:
         inline operator int() const { return key; }
         inline bool operator==(Key k) { return key == k.key; }
     };
-    
+   
+    inline int size() const { return term_count; }
     int lookup(const char *text, size_t len) const;
     inline bool isStopWord(int term_id) const;
+    inline float getIDF() const;
     inline Key getPostingsKey(int term_id, IndexType idxtype) const;
 };
 
@@ -200,7 +218,7 @@ void Dictionary::do_read(Reader rd)
     Reader bucket_size_rd = rd;
 
     /* count terms */
-    int term_count = 0;
+    term_count = 0;
     for(int i=0; i<bucket_count; i++)
         term_count += rd.read_u8();
 
@@ -219,6 +237,7 @@ void Dictionary::do_read(Reader rd)
             int bucket_size = bucket_size_rd.read_u8();
             while(bucket_size--) {
                 t->lemmatized_list_id = rd.read_u24();
+                t->idf = rd.read_u24();
                 t->text_length = rd.read_u8();
                 if(t->text_length & 0x80) {
                     t->stop = true;
@@ -283,6 +302,9 @@ int Dictionary::lookup(const char *text, size_t len) const
 
 bool Dictionary::isStopWord(int term_id) const {
     return terms[term_id].stop;
+}
+float Dictionary::Key::getIDF(int term_id) const {
+    return logf((float)size() / (float)terms[term_id].idf);
 }
 
 Dictionary::Key Dictionary::getPostingsKey(int term_id, IndexType idxtype) const
@@ -968,9 +990,12 @@ int* BooleanQueryEngine::decodePostings(Reader rd, int count)
     int *ret = talloc_array(memctx, int, count);
     assert(ret);
 
-    ret[0] = rd.read_u24();
-    for(int i=1; i<count; i++)
-        ret[i] = ret[i-1] + rd.read_uv();
+    ret[0] = rd.read_u24(); /* document id */
+    rd.read_uv(); /* term-frequency */
+    for(int i=1; i<count; i++) {
+        ret[i] = ret[i-1] + rd.read_uv(); /* document id */
+        rd.read_uv(); /* term-frequency */
+    }
 
     return ret;
 }
@@ -1064,7 +1089,7 @@ void BooleanQueryEngine::printResult(const QueryNode *root)
     printf("QUERY: %s TOTAL: %d\n", queryText, root->n_postings);
     if(!noResults)
         for(int i=0; i<root->n_postings; i++) 
-            puts(artitles.lookup(postings[i]));
+            puts(artitles.title(postings[i]));
 }
 
 void BooleanQueryEngine::do_run(QueryNode *root)
@@ -1296,7 +1321,7 @@ void PhraseQueryEngine::printResult()
     printf("QUERY: %s TOTAL: %d\n", queryText, n_documents);
     if(!noResults)
         for(int i=0; i<n_documents; i++) 
-            puts(artitles.lookup(docs[i].doc_id));
+            puts(artitles.title(docs[i].doc_id));
 }
 
 void PhraseQueryEngine::do_run(QueryNode *root)
