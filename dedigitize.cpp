@@ -19,8 +19,8 @@ int main(int argc, char *argv[])
         rawpost x(*p++);
         char term_text[256+16];
         corp.lookup(x.term_id(), term_text, sizeof(term_text));
-        printf("term '%s', id %d, doc %d, offs %d\n",
-                term_text, x.term_id(), x.doc_id(), x.term_off());
+        printf("term '%s', id %d, doc %d, pos %d\n",
+                term_text, x.term_id(), x.doc_id(), x.term_pos());
     }
 
     return 0;

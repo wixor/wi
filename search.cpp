@@ -1,3 +1,4 @@
+#include <math.h>
 #include <time.h>
 #include <getopt.h>
 #include <pthread.h>
@@ -48,6 +49,7 @@ double Timer::end()
 class Artitles
 {
     void *memctx;
+    int n_articles;
     float *pageranks;
     uint16_t *term_counts;
     char **titles;
@@ -56,9 +58,10 @@ public:
     Artitles();
     ~Artitles();
     void read(const char *filename);
+    inline int size() const { return n_articles; }
     inline const char *getTitle(int key) const { return titles[key]; }
-    inline int *getTermCount(int key) const { return term_counts[key]; }
-    inline float *getPageRank(int key) const { return pageranks[key]; }
+    inline int getTermCount(int key) const { return term_counts[key]; }
+    inline float getPageRank(int key) const { return pageranks[key]; }
 };
 
 Artitles::Artitles() {
@@ -82,7 +85,6 @@ void Artitles::read(const char *filename)
 
     FileIO fio(filename, O_RDONLY);
     
-    int n_articles;
     { uint32_t hdr[2];
       fio.read_raw(hdr, sizeof(hdr));
       assert(hdr[0] == 0x4c544954);
@@ -170,7 +172,7 @@ public:
     inline int size() const { return term_count; }
     int lookup(const char *text, size_t len) const;
     inline bool isStopWord(int term_id) const;
-    inline float getIDF() const;
+    inline float getIDF(int term_id) const;
     inline Key getPostingsKey(int term_id, IndexType idxtype) const;
 };
 
@@ -301,9 +303,9 @@ int Dictionary::lookup(const char *text, size_t len) const
 bool Dictionary::isStopWord(int term_id) const {
     return terms[term_id].stop;
 }
-float Dictionary::Key::getIDF(int term_id) const {
+float Dictionary::getIDF(int term_id) const {
     int k = lemmatized[terms[term_id].lemmatized_list_id].n_postings;
-    return logf((float)size() / (float)k);
+    return logf((float)artitles.size() / (float)k);
 }
 
 Dictionary::Key Dictionary::getPostingsKey(int term_id, IndexType idxtype) const
@@ -1088,7 +1090,7 @@ void BooleanQueryEngine::printResult(const QueryNode *root)
     printf("QUERY: %s TOTAL: %d\n", queryText, root->n_postings);
     if(!noResults)
         for(int i=0; i<root->n_postings; i++) 
-            puts(artitles.title(postings[i]));
+            puts(artitles.getTitle(postings[i]));
 }
 
 void BooleanQueryEngine::do_run(QueryNode *root)
@@ -1320,7 +1322,7 @@ void PhraseQueryEngine::printResult()
     printf("QUERY: %s TOTAL: %d\n", queryText, n_documents);
     if(!noResults)
         for(int i=0; i<n_documents; i++) 
-            puts(artitles.title(docs[i].doc_id));
+            puts(artitles.getTitle(docs[i].doc_id));
 }
 
 void PhraseQueryEngine::do_run(QueryNode *root)

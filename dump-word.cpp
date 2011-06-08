@@ -17,7 +17,6 @@ public:
     struct Term {
         int lemmatized_list_id;
         char *text; /* the actual word */
-        int idf; /* how many documents contain this term */
         short text_length; /* how long is the word (bytes) */
         bool stop; /* if the term is a stopword */
     };

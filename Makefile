@@ -1,8 +1,8 @@
 CC := gcc
 CXX := g++
 CPPFLAGS := -D_FILE_OFFSET_BITS=64 
-CXXFLAGS := -O3 -g -pthread -march=native -Wall
-LDFLAGS := -pthread -ltalloc -lrt -lstdc++
+CXXFLAGS := -O3 -g -pthread -march=native -Wall -msse -msse2 -mfpmath=sse
+LDFLAGS := -pthread -ltalloc -lrt -lstdc++ -lm
 
 all: search dump-word corpus-test dedigitize digitize invert lemmatize make-aliases make-binmorfo make-corpus make-index make-mosquare mark-stop
 

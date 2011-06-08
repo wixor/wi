@@ -14,7 +14,6 @@ class IndexMaker
         int length;
         int bucket;
         int alias;
-        int idf;
         struct {
             int id, n_entries, length;
         } lemmatized;
@@ -372,7 +371,6 @@ void IndexMaker::write_dict()
         if(term->empty)
             continue;
         wr.write_u24(term->lemmatized.id);
-        wr.write_u24(term->idf);
         wr.write_u8(term->length);
     }
     
