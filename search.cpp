@@ -532,7 +532,9 @@ class QueryParser
     QueryNode *do_run(const char *query);
 
 public:
-    static inline QueryNode *run(const char *query);
+    static inline QueryNode *run(const char *query) {
+        return QueryParser().do_run(query);
+    }
 };
 
 QueryNode *QueryParser::makeNode(QueryNode::Type type, QueryNode *lhs, QueryNode *rhs, const char *term) const
@@ -635,11 +637,6 @@ QueryNode *QueryParser::do_run(const char *query)
 
     talloc_free(memctx);
     return NULL;
-}
-
-QueryNode *QueryParser::run(const char *query) {
-    QueryParser qp;
-    return qp.do_run(query);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -799,7 +796,9 @@ class BooleanQueryEngine : public QueryEngineBase
     void do_run(QueryNode *root);
 
 public:
-    static inline void run(QueryNode *root);
+    static inline void run(QueryNode *root) {
+        BooleanQueryEngine().do_run(root);
+    }
 };
 
 int BooleanQueryEngine::countStopwords(const QueryNode *node) {
@@ -1126,10 +1125,6 @@ void BooleanQueryEngine::do_run(QueryNode *root)
     printResult(root);
 }
 
-void BooleanQueryEngine::run(QueryNode *root) {
-    BooleanQueryEngine e;
-    e.do_run(root);
-}
 
 /* -------------------------------------------------------------------------- */
 
@@ -1155,7 +1150,9 @@ class PhraseQueryEngine : public QueryEngineBase
     void do_run(QueryNode *root);
 
 public:
-    static inline void run(QueryNode *root);
+    static inline void run(QueryNode *root) {
+        PhraseQueryEngine().do_run(root);
+    }
 };
 
 void PhraseQueryEngine::sortTerms()
@@ -1355,11 +1352,6 @@ void PhraseQueryEngine::do_run(QueryNode *root)
     printResult();
 }
 
-void PhraseQueryEngine::run(QueryNode *root)
-{
-    PhraseQueryEngine e;
-    e.do_run(root);
-}
 
 /* -------------------------------------------------------------------------- */
 
