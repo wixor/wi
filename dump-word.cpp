@@ -16,9 +16,10 @@ public:
 
     struct Term {
         int lemmatized_list_id;
-        short text_length;
-        bool stop;
-        char *text;
+        char *text; /* the actual word */
+        int idf; /* how many documents contain this term */
+        short text_length; /* how long is the word (bytes) */
+        bool stop; /* if the term is a stopword */
     };
 
 private:
@@ -202,11 +203,12 @@ int main(int argc, char *argv[])
         if(info.lemmatized.length) {
             Reader rd((const char *)lemmatized.data() + info.lemmatized.offset, info.lemmatized.length);
 
-            int doc_id = rd.read_u24();
-            printf("    %d\n", doc_id);
+            int doc_id = rd.read_u24(), tf = rd.read_uv();
+            printf("    %d (%d times)\n", doc_id, tf);
             for(int i=1; i<info.lemmatized.n_postings; i++) {
                 doc_id += rd.read_uv();
-                printf("    %d\n", doc_id);
+                tf = rd.read_uv();
+                printf("    %d (%d times)\n", doc_id, tf);
             }
         }
 

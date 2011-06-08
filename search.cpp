@@ -128,7 +128,6 @@ class Dictionary
     struct Term {
         int lemmatized_list_id;
         char *text; /* the actual word */
-        int idf; /* how many documents contain this term */
         short text_length; /* how long is the word (bytes) */
         bool stop; /* if the term is a stopword */
     };
@@ -237,7 +236,6 @@ void Dictionary::do_read(Reader rd)
             int bucket_size = bucket_size_rd.read_u8();
             while(bucket_size--) {
                 t->lemmatized_list_id = rd.read_u24();
-                t->idf = rd.read_u24();
                 t->text_length = rd.read_u8();
                 if(t->text_length & 0x80) {
                     t->stop = true;
@@ -304,7 +302,8 @@ bool Dictionary::isStopWord(int term_id) const {
     return terms[term_id].stop;
 }
 float Dictionary::Key::getIDF(int term_id) const {
-    return logf((float)size() / (float)terms[term_id].idf);
+    int k = lemmatized[terms[term_id].lemmatized_list_id].n_postings;
+    return logf((float)size() / (float)k);
 }
 
 Dictionary::Key Dictionary::getPostingsKey(int term_id, IndexType idxtype) const

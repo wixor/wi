@@ -147,13 +147,6 @@ dla każdego słowa:
     u32: id słowa na dolnych 24 bitach, ilość baz na górnych 8 bitach
     u32[]: id kolejnych baz słowa
 
-... 0e. Plik term-frequency:
-
-u64[]: ciąg symboli, gdzie każdy symbol składa się z:
-        - 25 bitów: id termu według korpusu (msb)
-        - 20 bitów: id dokumentu
-        - 19 bitów: ilość wystąpień termu w dokumencie
-
 --------------------------------------------------------------------------------
 1. TYTUŁY ARTYKUŁÓW
 
@@ -187,7 +180,7 @@ dla każdej listy lematyzowanej:
 dla każdego słowa:
     utf8: słowo
 
-Rozmiar pliku: około 150MB. Struktura zrobiona tak, aby można było wczytać
+Rozmiar pliku: około 66MB. Struktura zrobiona tak, aby można było wczytać
 całość do pamięci. Kolejność słów wyznacza kolejność w indeksie pozycyjnym
 (ale nie w lematyzowanym), gdzie każde słowo ma swoją własną listę. W indeksie
 lematyzowanym listy mogą być współdzielone, to znaczy wiele słów może wskazywać
