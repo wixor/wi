@@ -100,6 +100,8 @@ void Artitles::read(const char *filename)
     talloc_steal(memctx, term_counts);
     talloc_steal(memctx, title_texts);
 
+    fio.close();
+
     titles = talloc_array(memctx, char *, n_articles);
     assert(titles);
 
