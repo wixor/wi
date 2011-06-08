@@ -76,8 +76,8 @@ int main(void)
     FileMapping invlemmap("db/invlemma");
     Reader rd(invlemmap.data(), invlemmap.size());
 
-    FileIO tffile("db/tfs", O_WRONLY|O_CREAT|O_TRUNC, 0666),
-           idffile("db/idfs", O_WRONLY|O_CREAT|O_TRUNC, 0666);
+    FileIO tffile("db/tfs", O_WRONLY|O_CREAT|O_TRUNC),
+           idffile("db/idfs", O_WRONLY|O_CREAT|O_TRUNC);
 
     TfIdfMaker::run(rd, tffile, idffile, corp.size());
 
