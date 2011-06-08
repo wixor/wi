@@ -1,11 +1,16 @@
-extern "C" {
-	#include <talloc.h>
-}
+#include <math.h>
 #include <assert.h>
+#include <string.h>
+extern "C" {
+#include <talloc.h>
+}
 #include "bufrw.h"
 #include "fileio.h"
 #include "corpus.h"
 #include "rawpost.h"
+
+template<typename T>
+static inline T square(const T &x) { return x*x; }
 
 class IndexMaker
 {
@@ -23,38 +28,51 @@ class IndexMaker
         bool has_lemmatized, has_positional, empty;
     };
     
+
     void *memctx;
 
-    int n_terms, lemmatized_list_count;
-    TermHasher th;
+    int n_terms;
     struct term *terms;
+    int dummy_term_id, marker_term_id;
+
+    TermHasher th;
     int *bucket_sizes;
+    
+    int lemmatized_list_count;
+
+    int n_articles;
+    uint16_t *article_lengths;
+    float *tfidf_weights;
+
 
     static void seek_until(int term_id, Reader *rd);
     class PositionalWriter
     {
+        IndexMaker *im;
         FileMapping fmap;
         Reader rd;
         Writer docs, positions;
         FileIO fio;
 
     public:
-        inline PositionalWriter();
+        inline PositionalWriter(IndexMaker *im);
         inline ~PositionalWriter();
         inline bool run(struct term *term);
     };
     class LemmatizedWriter
     {
+        IndexMaker *im;
         FileMapping fmap;
         Reader rd;
         Writer wr;
         FileIO fio;
     public:
-        inline LemmatizedWriter();
+        inline LemmatizedWriter(IndexMaker *im);
         inline ~LemmatizedWriter();
-        inline bool run(struct term *term);
+        inline bool run(struct term *term, bool rank);
     };
 
+    inline void read_artitles();
     inline void read_corpus();
     inline void read_aliases();
     inline void process_positional();
@@ -62,6 +80,7 @@ class IndexMaker
     inline void resolve_aliases();
     inline void compute_bucket_sizes();
     inline void write_dict();
+    inline void write_tfidf_weights();
 
     void do_run();
 public:
@@ -84,7 +103,8 @@ void IndexMaker::seek_until(int id, Reader *rd)
     }
 }
 
-IndexMaker::PositionalWriter::PositionalWriter() {
+IndexMaker::PositionalWriter::PositionalWriter(IndexMaker *im) {
+    this->im = im;
     fmap.attach("db/inverted");
     rd.attach(fmap.data(), fmap.size());
     fio.open("db/positional", O_WRONLY|O_CREAT|O_TRUNC);
@@ -169,7 +189,8 @@ bool IndexMaker::PositionalWriter::run(struct term *term)
     }
 }
 
-IndexMaker::LemmatizedWriter::LemmatizedWriter() {
+IndexMaker::LemmatizedWriter::LemmatizedWriter(IndexMaker *im) {
+    this->im = im;
     fmap.attach("db/invlemma");
     rd.attach(fmap.data(), fmap.size());
     fio.open("db/lemmatized", O_WRONLY|O_CREAT|O_TRUNC);
@@ -179,18 +200,42 @@ IndexMaker::LemmatizedWriter::~LemmatizedWriter() {
     fio.close();
     wr.free();
 }
-bool IndexMaker::LemmatizedWriter::run(struct term *term)
+bool IndexMaker::LemmatizedWriter::run(struct term *term, bool rank)
 {
     /* seek until postings for requested term */
     seek_until(term->id, &rd);
+
+    int n_entries = 0; /* how many different documents there are */
+    {
+        size_t save = rd.tell();
+        int last_doc_id = -1; /* last document id seen */
+        while(!rd.eof()) { 
+            rawpost e(rd.read_u64());
+            if(e.term_id() > term->id) 
+                break;
+            if(e.doc_id() != last_doc_id) {
+                n_entries++;
+                last_doc_id = e.doc_id();
+            }
+        }
+        rd.seek(save);
+    }
+
+    /* if no documents have the term, quit now */
+    if(!n_entries)
+        return false;
+
+    /* this tells us, how frequent the term is among documents */
+    assert(n_entries <= im->n_articles);
+    float idf = logf((float)im->n_articles / (float)n_entries);
+    assert(idf >= 0.f);
 
     /* init postings buffer */
     wr.rewind();
 
     int last_doc_id = -1, /* last document id seen */
-        n_pos = 0, /* how many times the term appears in the document (tf) */
-        n_entries = 0; /* how many different documents there are */
-
+        n_pos = 0; /* how many times the term appears in the document (tf) */
+    
     while(!rd.eof()) /* for each posting for the term */
     {
         size_t save = rd.tell();
@@ -211,30 +256,37 @@ bool IndexMaker::LemmatizedWriter::run(struct term *term)
                 wr.write_u24(e.doc_id());
             } else {
                 /* next document, write down how many times the term appeared
-                 * in last document and new doc_id */
+                 * in last document. also update its tfidf weights, since we
+                 * now have all info at hand. then move on to next document. */
+                if(likely(rank)) {
+                    assert(n_pos && n_pos <= im->article_lengths[last_doc_id]);
+                    float tf = (float)n_pos / (float)im->article_lengths[last_doc_id];
+                    im->tfidf_weights[last_doc_id] += square(tf * idf);
+                }
                 wr.write_uv(n_pos);
                 wr.write_uv(e.doc_id() - last_doc_id);
             }
             /* either way, we have a new document */        
             last_doc_id = e.doc_id();
             n_pos = 1;
-            n_entries++;
         }
     }
 
-    /* write down tf for last document */
-    if(last_doc_id != -1)
+    /* write down tf for last document and update its tfidf weight */
+    if(last_doc_id != -1) {
+        if(likely(rank)) {
+            assert(n_pos && n_pos <= im->article_lengths[last_doc_id]);
+            float tf = (float)n_pos / (float)im->article_lengths[last_doc_id];
+            im->tfidf_weights[last_doc_id] += square(tf * idf);
+        }
         wr.write_uv(n_pos);
+    }
 
-    /* see if we got anything, save to file if so */
+    /* save what we've got to file */
     term->lemmatized.n_entries = n_entries;
     term->lemmatized.length = wr.tell();
-    if(n_entries) {
-        fio.write_raw(wr.buffer(), wr.tell());
-        return true;
-    } else {
-        return false;
-    }
+    fio.write_raw(wr.buffer(), wr.tell());
+    return true;
 }
 
 void IndexMaker::do_run()
@@ -242,6 +294,7 @@ void IndexMaker::do_run()
     memctx = talloc_named_const(NULL, 0, "index maker");
     assert(memctx);
 
+    read_artitles();
     read_corpus();
     read_aliases();
     process_positional();
@@ -249,8 +302,30 @@ void IndexMaker::do_run()
     resolve_aliases();
     compute_bucket_sizes();
     write_dict();
+    write_tfidf_weights();
 
     talloc_free(memctx);
+}
+
+void IndexMaker::read_artitles()
+{
+    printf("reading artitles...\n");
+
+    uint32_t hdr[2];
+    FileIO fio("db/artitles", O_RDONLY);
+    fio.read_raw(hdr, sizeof(hdr));
+
+    assert(hdr[0] == 0x4c544954);
+    n_articles = hdr[1];
+
+    tfidf_weights = talloc_array(memctx, float, n_articles);
+    article_lengths = talloc_array(memctx, uint16_t, n_articles);
+    assert(tfidf_weights && article_lengths);
+
+    memset(tfidf_weights, 0, sizeof(float)*n_articles);
+    fio.read_raw(article_lengths, sizeof(uint16_t)*n_articles, 8+8*n_articles);
+
+    fio.close();
 }
 
 void IndexMaker::read_corpus()
@@ -260,6 +335,9 @@ void IndexMaker::read_corpus()
     Corpus corp("db/corpus");
     n_terms = corp.size();
     th = corp.hasher();
+
+    dummy_term_id = corp.lookup("\"", 1);
+    marker_term_id = corp.lookup("\"m", 2);
 
     terms = talloc_array(memctx, struct term, n_terms);
     assert(terms);
@@ -301,18 +379,20 @@ void IndexMaker::process_positional()
 {
     printf("processing positional lists...\n");
 
-    PositionalWriter poswr;
+    PositionalWriter poswr(this);
     for(int i=0; i<n_terms; i++)
-         terms[i].has_positional = poswr.run(terms+i);
+        if(i != dummy_term_id && i != marker_term_id)
+            terms[i].has_positional = poswr.run(terms+i);
 }
 
 void IndexMaker::process_lemmatized()
 {
     printf("processing lemmatized lists...\n");
 
-    LemmatizedWriter lemwr;
+    LemmatizedWriter lemwr(this);
     for(int i=0; i<n_terms; i++)
-        terms[i].has_lemmatized = lemwr.run(terms+i);
+        if(i != dummy_term_id)
+            terms[i].has_lemmatized = lemwr.run(terms+i, i != marker_term_id);
 }
 
 void IndexMaker::resolve_aliases()
@@ -404,6 +484,20 @@ void IndexMaker::write_dict()
     
     FileIO dictionary("db/dictionary", O_WRONLY|O_CREAT|O_TRUNC);
     dictionary.write_raw(wr.buffer(), wr.tell());
+}
+
+void IndexMaker::write_tfidf_weights()
+{
+    printf("writing tfidf weights...\n");
+
+    /* compute actual inverses of vector lengths and save them */
+    for(int i=0; i<n_articles; i++)
+        tfidf_weights[i] =
+            tfidf_weights[i] != 0.f ? 1.f/sqrtf(tfidf_weights[i]) : 0.f;
+
+    FileIO fio("db/artitles", O_WRONLY);
+    fio.write_raw(tfidf_weights, sizeof(float)*n_articles, 8);
+    fio.close();
 }
 
 int main(void) {

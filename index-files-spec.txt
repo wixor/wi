@@ -152,11 +152,13 @@ dla każdego słowa:
 
 u32: magiczna liczba ('TITL')
 u32: ilość artykułów
+float[]: wagi artykułów w modelu przestrzeni wektorowej tf-idf
+         (czyli odwrotności długości wektora dokumentu w tej przestrzeni)
 float[]: pageranki artykułów
 u16[]: ilości termów w artykułach
 utf8z[]: tytuły artykułów
 
-Rozmiar pliku: około 20MB. Struktura przewidziana do wczytania wszystkiego
+Rozmiar pliku: około 24MB. Struktura przewidziana do wczytania wszystkiego
 do pamięci (stąd brak prostego dostępu do n-tego dokumentu).
 
 --------------------------------------------------------------------------------
