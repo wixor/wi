@@ -154,12 +154,6 @@ u64[]: ciąg symboli, gdzie każdy symbol składa się z:
         - 20 bitów: id dokumentu
         - 19 bitów: ilość wystąpień termu w dokumencie
 
-... 0f. Plik inverse-document-frequency:
-
-u32: magiczna liczba ('IDFR')
-u32: ilość termów
-u32[]: dla każdego termu, ilość dokumentów, w których występuje
-
 --------------------------------------------------------------------------------
 1. TYTUŁY ARTYKUŁÓW
 
@@ -182,7 +176,6 @@ u8[]: ilość słów w kubełku
 dla każdego kubełka:
     dla każdego słowa:
         u24: numer listy lematyzowanej
-        u24: ilość dokumentów zawierających term
         u8: długość słowa na dolnych 7 bitach,
             ósmy bit ustawiony oznacza stopword
 dla każdej listy pozycyjnej:
