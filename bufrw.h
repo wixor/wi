@@ -106,6 +106,7 @@ public:
  * - seek_past: advance current position past the first occurence of given byte
  * - read_raw: read raw data from current position
  * - read_u[8/16/24/32]: read little-endian unsigned integer of given size
+ * - assert_u[8/16/24/32]: read integer and assert its value
  * - read_uv: read unsigned integer using variable length encoding
  * - read_utf8: read integer using utf-8 encoding
  * - align: move current position forward so that is is suitably aligned
@@ -167,6 +168,12 @@ public:
     inline uint32_t read_u24() { return read_u8() | (read_u16() << 8); }
     inline uint32_t read_u32() { uint32_t ret; read_raw(&ret, sizeof(ret)); return le32toh(ret); }
     inline uint64_t read_u64() { uint64_t ret; read_raw(&ret, sizeof(ret)); return le64toh(ret); }
+
+    inline void assert_u8(uint8_t v)   { uint8_t  x = read_u8();  assert(x == v); }
+    inline void assert_u16(uint16_t v) { uint16_t x = read_u16(); assert(x == v); }
+    inline void assert_u24(uint32_t v) { uint32_t x = read_u32(); assert(x == v); }
+    inline void assert_u32(uint32_t v) { uint32_t x = read_u32(); assert(x == v); }
+    inline void assert_u64(uint64_t v) { uint64_t x = read_u64(); assert(x == v); }
 
     uint32_t read_uv();
     int read_utf8();

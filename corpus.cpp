@@ -26,7 +26,7 @@ void Corpus::read(const char *filename)
     FileMapping fmap(filename);
     Reader rd(fmap.data(), fmap.size());
 
-    if(rd.read_u32() != 0x50524f43) abort();
+    rd.assert_u32(0x50524f43);
     th.a = rd.read_u32();
     th.b = rd.read_u32();
     th.n = rd.read_u32();

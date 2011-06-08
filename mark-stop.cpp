@@ -16,7 +16,7 @@ static void read_dict(Reader rd)
     void *memctx = talloc_named_const(NULL, 0, "dictionary");
 
     /* check magic value */
-    if(rd.read_u32() != 0x54434944) abort();
+    rd.assert_u32(0x54434944);
 
     /* read hash function parameters */
     th.a = rd.read_u32();

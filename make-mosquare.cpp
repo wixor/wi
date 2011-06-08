@@ -7,7 +7,7 @@ int main(void)
 {
     FileMapping morf("db/morfologik");
     Reader rd(morf.data(), morf.size());
-    if(rd.read_u32() != 0x46524f4d) abort();
+    rd.assert_u32(0x46524f4d);
     int n_words = rd.read_u32();
 
     std::vector<long long> v;
@@ -37,8 +37,8 @@ int main(void)
 
     FileMapping ali("db/aliases");
     Reader alird(ali.data(), ali.size());
-    if(alird.read_u32() != 0x41494c41) abort();
-    if(alird.read_u32() != n_words) abort();
+    alird.assert_u32(0x41494c41);
+    alird.assert_u32(n_words);
     const int *aliases = (const int *)alird.buffer() + 2;
 
     std::vector<int> e;

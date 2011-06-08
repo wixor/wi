@@ -7,7 +7,7 @@ int main(void)
 {
     FileMapping morf("db/morfologik");
     Reader rd(morf.data(), morf.size());
-    if(rd.read_u32() != 0x46524f4d) abort();
+    rd.assert_u32(0x46524f4d);
     int n_words = rd.read_u32();
 
     Writer wr;

@@ -85,7 +85,7 @@ void Artitles::read(const char *filename)
     int n_articles;
     { uint32_t hdr[2];
       fio.read_raw(hdr, sizeof(hdr));
-      if(hdr[0] != 0x4c544954) abort();
+      assert(hdr[0] == 0x4c544954);
       n_articles = hdr[1];
     }
 
@@ -203,7 +203,7 @@ void Dictionary::read(const char *filename)
 void Dictionary::do_read(Reader rd)
 {
     /* check magic value */
-    if(rd.read_u32() != 0x54434944) abort();
+    rd.assert_u32(0x54434944);
 
     /* read hash function parameters */
     hasher.a = rd.read_u32();
@@ -411,7 +411,7 @@ int PostingsSource::openIndex(const char *filename, uint32_t magic)
     
     uint32_t mg;
     fio.read_raw(&mg, sizeof(mg));
-    if(mg != magic) abort();
+    assert(mg == magic);
 
     return fio.filedes();
 }
