@@ -22,6 +22,7 @@
  * API summary:
  * - buffer: return the underlying buffer
  * - tell: how many bytes have been written
+ * - rewind: forget any data written to the buffer
  * - skip: move current position forward without writing any data
  * - write_raw: write raw data at current position
  * - write_u[8/16/24/32]: write little-endian unsigned integer of given size
@@ -33,7 +34,7 @@ class Writer
 {
     /* buf = beginning of the buffer,
      * ptr = current position,
-     * end = end of the buffer (first address past the last buffer byte
+     * end = end of the buffer (first address past the last buffer byte)
      *
      * it holds that buffer size = end - buf and buf <= ptr <= end. */
     char *buf, *ptr, *end;
@@ -50,6 +51,10 @@ public:
     inline const void* buffer() const { return buf; }
     inline void* buffer() { return buf; }
     inline size_t tell() const { return ptr - buf; }
+
+    inline void rewind() {
+        ptr = buf;
+    }
 
     inline void skip(size_t size)
     {
