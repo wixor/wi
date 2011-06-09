@@ -37,7 +37,7 @@ public:
     inline void attach(const void *buf, size_t len) {
         rd.attach(buf, len);
     }
-    inline off_t seek(ssize_t offs, int whence = SEEK_SET) { return rd.seek(offs, whence); }
+    inline size_t seek(ssize_t offs, int whence = SEEK_SET) { return rd.seek(offs, whence); }
     inline size_t tell() const { return rd.tell(); }
     inline bool eof() const { return rd.eof(); }
 
