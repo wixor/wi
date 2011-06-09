@@ -15,7 +15,7 @@ extern "C" {
 /* -------------------------------------------------------------------------- */
 
 static char queryText[1024];
-static bool verbose, noResults, only_marked_docs;
+static bool verbose, noResults, onlyMarkedDocs;
 #define info(fmt, ...) \
     do { if(unlikely(verbose)) printf(fmt, ## __VA_ARGS__); } while (0)
 
@@ -1430,7 +1430,7 @@ void FreeTextQueryEngine::processPostings()
             info("processing posting list 0x%08x\n", (int)rq->postings_key);
 
             int n_postings = info.n_postings;
-            if(only_marked_docs)
+            if(onlyMarkedDocs)
                 trimPostings(decoded, &n_postings);
             
             processTerm(decoded, n_postings);
@@ -1550,9 +1550,10 @@ void FreeTextQueryEngine::do_run(QueryNode *root)
 
 static void print_usage(void) __attribute__((noreturn));
 static void print_usage(void) {
-    fprintf(stderr, "usage: search [-v] [-r] [-h]\n"
+    fprintf(stderr, "usage: search [-v] [-r] [-m] [-h]\n"
                     "  -v: print verbose progress information\n"
                     "  -r: do not print title results\n"
+                    "  -m: consider only marked documents\n"
                     "  -h: print this help message\n");
     exit(1);
 }
@@ -1564,6 +1565,7 @@ int main(int argc, char *argv[])
         else switch(opt) {
             case 'v': verbose = true; break;
             case 'r': noResults = true; break;
+            case 'm': onlyMarkedDocs = true; break;
             case 'h':
             default: print_usage();
         }
