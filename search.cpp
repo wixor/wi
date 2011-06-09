@@ -16,6 +16,7 @@ extern "C" {
 
 static char queryText[1024];
 static bool verbose, noResults, onlyMarkedDocs;
+static int onlyBestDocs;
 #define info(fmt, ...) \
     do { if(unlikely(verbose)) printf(fmt, ## __VA_ARGS__); } while (0)
 
@@ -488,7 +489,7 @@ static PostingsSource posrc; /* GLOBAL */
 
 struct QueryNode
 {
-    enum Type { AND, OR, PHRASE, TERM } type;
+    enum Type { AND, OR, PHRASE, FREETEXT, TERM } type;
 
     QueryNode *lhs, *rhs, *parent;
 
@@ -531,6 +532,7 @@ class QueryParser
     QueryNode *parse1(); /* or-s */
     QueryNode *parse2(); /* and-s */
     QueryNode *parsePhrase(); /* "query" */
+    QueryNode *parseFreeText(); /* t1 t2 t3 */
     QueryNode *parseQuery();
 
     QueryNode *do_run(const char *query);
@@ -605,7 +607,6 @@ QueryNode *QueryParser::parsePhrase() /* "query" */
         talloc_steal(tstr, memctx);
 
         QueryNode *term = makeNode(QueryNode::TERM, NULL, NULL, tstr);
-        talloc_steal(last, term);
 
         last->rhs = term;
         last = term;
@@ -617,10 +618,38 @@ QueryNode *QueryParser::parsePhrase() /* "query" */
     return root;
 }
 
+QueryNode *QueryParser::parseFreeText() /* t1 t2 t3 */
+{
+    size_t where = trd.tell();
+    
+    QueryNode *root = makeNode(QueryNode::FREETEXT, NULL, NULL, NULL);
+
+    QueryNode *last = root;
+    while(!trd.eof())
+    {
+        char *tstr = trd.readTerm();
+        if(!tstr) break;
+        talloc_steal(tstr, memctx);
+
+        QueryNode *term = makeNode(QueryNode::TERM, NULL, NULL, tstr);
+
+        last->rhs = term;
+        last = term;
+    }
+
+    if(!trd.eof()) {
+        trd.seek(where);
+        return NULL;
+    }
+
+    return root;
+}
+
 QueryNode *QueryParser::parseQuery()
 {
     QueryNode *root = NULL;
     if(!root) root = parsePhrase();
+    if(!root) root = parseFreeText();
     if(!root) root = parse2();
     trd.eatWhitespace();
 
@@ -692,6 +721,11 @@ void QueryEngineBase::dumpQueryTree(const QueryNode *node, int indent)
             printf("AND, expected: %d\n", node->estim_postings);
             dumpQueryTree(node->lhs, 3+indent);
             dumpQueryTree(node->rhs, 3+indent);
+            return;
+        case QueryNode::FREETEXT:
+            printf("FREETEXT\n");
+            for(const QueryNode *p = node->rhs; p; p = p->rhs)
+                dumpQueryTree(p, 3+indent);
             return;
         case QueryNode::PHRASE:
             printf("PHRASE\n");
@@ -1512,9 +1546,10 @@ void FreeTextQueryEngine::sortResult()
 
 void FreeTextQueryEngine::printResult()
 {
+    int n = onlyBestDocs && onlyBestDocs < n_docs ? onlyBestDocs : n_docs;
     printf("QUERY: %s TOTAL: %d\n", queryText, n_docs);
     if(!noResults)
-        for(int i=0; i<n_docs; i++) 
+        for(int i=0; i<n; i++) 
             printf("%d: %s (%lf)\n", 
                     i+1, artitles.getTitle(docs[i].doc_id), docs[i].weight);
 }
@@ -1550,22 +1585,24 @@ void FreeTextQueryEngine::do_run(QueryNode *root)
 
 static void print_usage(void) __attribute__((noreturn));
 static void print_usage(void) {
-    fprintf(stderr, "usage: search [-v] [-r] [-m] [-h]\n"
+    fprintf(stderr, "usage: search [-v] [-r] [-m] [-b x] [-h]\n"
                     "  -v: print verbose progress information\n"
                     "  -r: do not print title results\n"
                     "  -m: consider only marked documents\n"
+                    "  -b: show only x best matches\n"
                     "  -h: print this help message\n");
     exit(1);
 }
 
 int main(int argc, char *argv[])
 {
-    while(int opt = getopt(argc, argv, "vrh"))
+    while(int opt = getopt(argc, argv, "vrhb:"))
         if(opt == -1) break;
         else switch(opt) {
             case 'v': verbose = true; break;
             case 'r': noResults = true; break;
             case 'm': onlyMarkedDocs = true; break;
+            case 'b': onlyBestDocs = strtol(optarg, NULL, 0); break; 
             case 'h':
             default: print_usage();
         }
@@ -1594,6 +1631,8 @@ int main(int argc, char *argv[])
             continue;
         if(root->type == QueryNode::PHRASE)
             PhraseQueryEngine::run(root);
+        else if(root->type == QueryNode::FREETEXT)
+            FreeTextQueryEngine::run(root);
         else
             BooleanQueryEngine::run(root);
         talloc_free(talloc_parent(root));
