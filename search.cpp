@@ -17,6 +17,8 @@ extern "C" {
 static char queryText[1024];
 static bool verbose, noResults, onlyMarkedDocs;
 static int onlyBestDocs;
+static float pageRankFactor = 0.6, tfidfFactor = 0.4;
+
 #define info(fmt, ...) \
     do { if(unlikely(verbose)) printf(fmt, ## __VA_ARGS__); } while (0)
 
@@ -1415,6 +1417,7 @@ class FreeTextQueryEngine : public QueryEngineBase
     inline struct doc *decodePostings(Reader rd, int count, int n_reps);
     void trimPostings(struct doc *postings, int *pn_postings);
     void processTerm(struct doc *postings, int n_postings);
+    inline void includePageRank();
     inline void sortResult();
     inline void printResult();
     
@@ -1539,6 +1542,14 @@ void FreeTextQueryEngine::processTerm(struct doc *postings, int n_postings)
     n_docs = (C - docs) + (Aend - A) + (Bend - B);
 }
 
+void FreeTextQueryEngine::includePageRank()
+{
+    for(int i=0; i<n_docs; i++)
+        docs[i].weight =
+            tfidfFactor*docs[i].weight +
+            pageRankFactor*artitles.getPageRank(docs[i].doc_id);
+}
+
 void FreeTextQueryEngine::sortResult()
 {
     std::sort(docs, docs+n_docs);
@@ -1576,6 +1587,7 @@ void FreeTextQueryEngine::do_run(QueryNode *root)
     createRqs();
     posrc.request(rqs, rqs_count);
     processPostings();
+    includePageRank();
     sortResult();
     printResult();
 }
@@ -1585,11 +1597,12 @@ void FreeTextQueryEngine::do_run(QueryNode *root)
 
 static void print_usage(void) __attribute__((noreturn));
 static void print_usage(void) {
-    fprintf(stderr, "usage: search [-v] [-r] [-m] [-b x] [-h]\n"
+    fprintf(stderr, "usage: search [-v] [-r] [-m] [-b x] [-h] [-f x:y]\n"
                     "  -v: print verbose progress information\n"
                     "  -r: do not print title results\n"
                     "  -m: consider only marked documents\n"
                     "  -b: show only x best matches\n"
+                    "  -f: specify pagerank factor (x) and tfidf factor(y)\n"
                     "  -h: print this help message\n");
     exit(1);
 }
@@ -1602,7 +1615,20 @@ int main(int argc, char *argv[])
             case 'v': verbose = true; break;
             case 'r': noResults = true; break;
             case 'm': onlyMarkedDocs = true; break;
-            case 'b': onlyBestDocs = strtol(optarg, NULL, 0); break; 
+            case 'b': {
+                char *end;
+                onlyBestDocs = strtol(optarg, &end, 0);
+                if(end == optarg || *end != '\0') print_usage();
+                break;
+            }
+            case 'f': {
+                char *end, *end2;
+                pageRankFactor = strtof(optarg, &end);
+                if(end == optarg || *end != ':') print_usage();
+                tfidfFactor = strtof(end+1, &end2);
+                if(end2 == end+1 || *end2 != '\0') print_usage();
+                break;
+            }
             case 'h':
             default: print_usage();
         }
