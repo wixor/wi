@@ -102,7 +102,7 @@ def tokenize(wikipedia, interesting_arts, wikilinks):
 		articles_terms_count.append(terms_per_article)
 
 		if ranked_articles:
-			sys.stderr.write("\nranked articles that left unset:\n" + '\n'.join(ranked_articles) + '\n')
+			sys.stderr.write("\nranked articles that left unset:\n" + '\n'.join(ranked_articles).encode('utf8') + '\n')
 
 		print "articles that weren't in 'wikilinki.txt':"
 		new_set = set()
