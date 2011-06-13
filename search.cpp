@@ -1445,22 +1445,32 @@ void FreeTextQueryEngine::fetchMarkedDocs()
     info("fetching marked documents\n");
 
     int markerTermId = dictionary.lookup("\"m", 2);
-    assert(markerTermId != -1);
+    if(markerTermId == -1) {
+        info("marker term does not appear in dictionary\n");
+        markedDocCount = 0;
+        return;
+    }
+
+    Dictionary::Key key = dictionary.getPostingsKey(markerTermId, LEMMATIZED);
+    Dictionary::PostingsInfo info = key.getPostingsInfo();
+
+    info("resolved marker term (%d): postings id 0x%08x, has %d postings at 0x%08llx, size %zu\n",
+          markerTermId, (int)key, info.postingCount, (unsigned long long)info.offset, info.size);
 
     PostingsSource::ReadRq rq;
-    rq.postingsKey = dictionary.getPostingsKey(markerTermId, LEMMATIZED);
-    rq.data = talloc_size(NULL, rq.postingsKey.getSize());
+    rq.postingsKey = key;
+    rq.data = talloc_size(NULL, info.size);
     assert(rq.data);
 
     posrc.request(&rq, 1);
     int done = posrc.wait();
     assert(done == 1);
 
-    markedDocCount = rq.postingsKey.getPostingCount();
+    markedDocCount = info.postingCount;
     markedDocs = talloc_array(NULL, int, markedDocCount);
     assert(markedDocs);
 
-    Reader rd(rq.data, rq.postingsKey.getSize());
+    Reader rd(rq.data, info.size);
     for(int i=0; i<markedDocCount; i++) {
         markedDocs[i] =
             (i == 0) ? rd.read_u24() : markedDocs[i-1] + rd.read_uv();
@@ -1468,7 +1478,6 @@ void FreeTextQueryEngine::fetchMarkedDocs()
     }
 
     talloc_free(rq.data);
-    info("got %d marked documents\n", markedDocCount);
 }
 
 void FreeTextQueryEngine::prepareTerms()
@@ -1637,6 +1646,8 @@ void FreeTextQueryEngine::do_run(QueryNode *root)
     docs = NULL;
     docCount = 0;
 
+    fetchMarkedDocs();
+
     resolveTerms(root, LEMMATIZED);
     
     dumpQueryTree(root, "raw query:");
@@ -1676,7 +1687,7 @@ static void print_usage(const char *progname, const char *reason) {
 
 int main(int argc, char *argv[])
 {
-    while(int opt = getopt(argc, argv, "vrhb:f:"))
+    while(int opt = getopt(argc, argv, "vrmb:f:h"))
         if(opt == -1) break;
         else switch(opt) {
             case 'v': verbose = true; break;
