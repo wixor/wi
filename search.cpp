@@ -55,21 +55,21 @@ double Timer::end()
 class Artitles
 {
     void *memctx;
-    int n_articles;
-    float *tfidf_weights;
+    int articleCount;
+    float *tfidfWeights;
     float *pageranks;
-    uint16_t *term_counts;
+    uint16_t *termCounts;
     char **titles;
 
 public:
     Artitles();
     ~Artitles();
     void read(const char *filename);
-    inline int size() const { return n_articles; }
+    inline int size() const { return articleCount; }
     inline const char *getTitle(int key) const { return titles[key]; }
-    inline int getTermCount(int key) const { return term_counts[key]; }
+    inline int getTermCount(int key) const { return termCounts[key]; }
     inline float getPageRank(int key) const { return pageranks[key]; }
-    inline float getTfIdfWeight(int key) const { return tfidf_weights[key]; }
+    inline float getTfIdfWeight(int key) const { return tfidfWeights[key]; }
 };
 
 Artitles::Artitles() {
@@ -96,31 +96,31 @@ void Artitles::read(const char *filename)
     { uint32_t hdr[2];
       fio.read_raw(hdr, sizeof(hdr));
       assert(hdr[0] == 0x4c544954);
-      n_articles = hdr[1];
+      articleCount = hdr[1];
     }
 
-    tfidf_weights = (float *)fio.read_raw_alloc(sizeof(float)*n_articles);
-    pageranks = (float *)fio.read_raw_alloc(sizeof(float)*n_articles);
-    term_counts = (uint16_t *)fio.read_raw_alloc(sizeof(uint16_t)*n_articles);
+    tfidfWeights = (float *)fio.read_raw_alloc(sizeof(float)*articleCount);
+    pageranks = (float *)fio.read_raw_alloc(sizeof(float)*articleCount);
+    termCounts = (uint16_t *)fio.read_raw_alloc(sizeof(uint16_t)*articleCount);
     off_t offs = fio.tell(), end = fio.seek(0, SEEK_END);
-    char *title_texts = (char *)fio.read_raw_alloc(end-offs, offs),
-         *title_texts_end = title_texts + (end-offs);
-    talloc_steal(memctx, tfidf_weights);
+    char *titleTexts = (char *)fio.read_raw_alloc(end-offs, offs),
+         *titleTextsEnd = titleTexts + (end-offs);
+    talloc_steal(memctx, tfidfWeights);
     talloc_steal(memctx, pageranks);
-    talloc_steal(memctx, term_counts);
-    talloc_steal(memctx, title_texts);
+    talloc_steal(memctx, termCounts);
+    talloc_steal(memctx, titleTexts);
 
     fio.close();
 
-    titles = talloc_array(memctx, char *, n_articles);
+    titles = talloc_array(memctx, char *, articleCount);
     assert(titles);
 
-    for(int i=0; i<n_articles; i++) {
-        titles[i] = title_texts;
-        title_texts =
-            (char *)memchr(title_texts, '\0', title_texts_end - title_texts);
-        assert(title_texts);
-        title_texts++;
+    for(int i=0; i<articleCount; i++) {
+        titles[i] = titleTexts;
+        titleTexts =
+            (char *)memchr(titleTexts, '\0', titleTextsEnd - titleTexts);
+        assert(titleTexts);
+        titleTexts++;
     }
 
     info("article titles read in %.03lf seconds.\n", timer.end());
@@ -136,19 +136,19 @@ class Dictionary
 {
     struct PostingList {
         off_t offset;
-        int n_postings;
+        int postingCount;
     };
 
     struct Term {
-        int lemmatized_list_id;
+        int lemmatizedListId;
         char *text; /* the actual word */
-        short text_length; /* how long is the word (bytes) */
+        short textLength; /* how long is the word (bytes) */
         bool stop; /* if the term is a stopword */
     };
 
     void *memctx;
 
-    int term_count;
+    int termCount;
     TermHasher hasher;
     PostingList *lemmatized, *positional;
     Term *terms, **buckets;
@@ -159,7 +159,7 @@ public:
     struct PostingsInfo {
         off_t offset;
         size_t size;
-        int n_postings;
+        int postingCount;
     };
 
     Dictionary();
@@ -176,15 +176,15 @@ public:
         inline PostingsInfo getPostingsInfo() const;
         inline off_t getOffset() const { return getPostingsInfo().offset; }
         inline size_t getSize() const { return getPostingsInfo().size; }
-        inline int getNPostings() const { return getPostingsInfo().n_postings; }
+        inline int getPostingCount() const { return getPostingsInfo().postingCount; }
         inline operator int() const { return key; }
         inline bool operator==(Key k) { return key == k.key; }
     };
    
-    inline int size() const { return term_count; }
+    inline int size() const { return termCount; }
     int lookup(const char *text, size_t len) const;
-    inline bool isStopWord(int term_id) const;
-    inline Key getPostingsKey(int term_id, IndexType idxtype) const;
+    inline bool isStopWord(int termId) const;
+    inline Key getPostingsKey(int termId, IndexType idxtype) const;
 };
 
 static Dictionary dictionary; /* GLOBAL */
@@ -223,71 +223,71 @@ void Dictionary::do_read(Reader rd)
     hasher.n = rd.read_u32();
 
     /* read lemmatized lists count */
-    int bucket_count = hasher.buckets(),
-        lemmatized_list_count = rd.read_u32();
+    int bucketCount = hasher.buckets(),
+        lemmatizedListCount = rd.read_u32();
 
     /* save bucket size reader for future use */
-    Reader bucket_size_rd = rd;
+    Reader bucketSizeRd = rd;
 
     /* count terms */
-    term_count = 0;
-    for(int i=0; i<bucket_count; i++)
-        term_count += rd.read_u8();
+    termCount = 0;
+    for(int i=0; i<bucketCount; i++)
+        termCount += rd.read_u8();
 
     /* allocate stuff */
-    lemmatized = talloc_array(memctx, PostingList, lemmatized_list_count+1);
-    positional = talloc_array(memctx, PostingList, term_count+1);
-    buckets = talloc_array(memctx, Term*, bucket_count+1);
-    terms = talloc_array(memctx, Term, term_count);
+    lemmatized = talloc_array(memctx, PostingList, lemmatizedListCount+1);
+    positional = talloc_array(memctx, PostingList, termCount+1);
+    buckets = talloc_array(memctx, Term*, bucketCount+1);
+    terms = talloc_array(memctx, Term, termCount);
     assert(lemmatized && positional && terms && buckets);
 
     { /* read bucket info */
         Term *t = terms;
-        for(int i=0; i<bucket_count; i++)
+        for(int i=0; i<bucketCount; i++)
         {
             buckets[i] = t;
-            int bucket_size = bucket_size_rd.read_u8();
-            while(bucket_size--) {
-                t->lemmatized_list_id = rd.read_u24();
-                t->text_length = rd.read_u8();
-                if(t->text_length & 0x80) {
+            int bucketSize = bucketSizeRd.read_u8();
+            while(bucketSize--) {
+                t->lemmatizedListId = rd.read_u24();
+                t->textLength = rd.read_u8();
+                if(t->textLength & 0x80) {
                     t->stop = true;
-                    t->text_length &=~ 0x80;
+                    t->textLength &=~ 0x80;
                 }
                 t++;
             }
         }
-        buckets[bucket_count] = t;
+        buckets[bucketCount] = t;
     }
 
     /* read positional list info */
     positional[0].offset = 4;/* because of index file magic number */
-    for(int i=1; i<=term_count; i++) {
+    for(int i=1; i<=termCount; i++) {
         positional[i].offset = positional[i-1].offset + rd.read_uv();;
-        positional[i-1].n_postings = rd.read_uv();
+        positional[i-1].postingCount = rd.read_uv();
     }
 
     /* read lemmatized list info */
     lemmatized[0].offset = 4; /* because of index file magic number */
-    for(int i=1; i<=lemmatized_list_count; i++) {
+    for(int i=1; i<=lemmatizedListCount; i++) {
         lemmatized[i].offset = lemmatized[i-1].offset + rd.read_uv();;
-        lemmatized[i-1].n_postings = rd.read_uv();
+        lemmatized[i-1].postingCount = rd.read_uv();
     }
 
     /* compute total texts length */
-    int term_texts_length = 0;
-    for(int i=0; i<term_count; i++)
-        term_texts_length += terms[i].text_length;
+    int termTextsLength = 0;
+    for(int i=0; i<termCount; i++)
+        termTextsLength += terms[i].textLength;
 
     /* read term texts */
-    char *term_texts = (char *)talloc_size(memctx, term_texts_length);
-    assert(term_texts);
-    rd.read_raw(term_texts, term_texts_length);
+    char *termTexts = (char *)talloc_size(memctx, termTextsLength);
+    assert(termTexts);
+    rd.read_raw(termTexts, termTextsLength);
 
     /* bind term texts to terms */
-    terms[0].text = term_texts;
-    for(int i=1; i<term_count; i++)
-        terms[i].text = terms[i-1].text + terms[i-1].text_length;
+    terms[0].text = termTexts;
+    for(int i=1; i<termCount; i++)
+        terms[i].text = terms[i-1].text + terms[i-1].textLength;
 
     /* make sure we read everything */
     assert(rd.eof());
@@ -300,7 +300,7 @@ int Dictionary::lookup(const char *text, size_t len) const
     const Term *t = buckets[h], *tend = buckets[h+1];
     for(int i=0; t < tend; t++,i++)
     {
-        if(len != (size_t)t->text_length)
+        if(len != (size_t)t->textLength)
             continue;
         if(memcmp(text, t->text, len) != 0)
             continue;
@@ -311,15 +311,15 @@ int Dictionary::lookup(const char *text, size_t len) const
     return -1;
 }
 
-bool Dictionary::isStopWord(int term_id) const {
-    return terms[term_id].stop;
+bool Dictionary::isStopWord(int termId) const {
+    return terms[termId].stop;
 }
 
-Dictionary::Key Dictionary::getPostingsKey(int term_id, IndexType idxtype) const
+Dictionary::Key Dictionary::getPostingsKey(int termId, IndexType idxtype) const
 {
     switch(idxtype) {
-        case LEMMATIZED: return Key(terms[term_id].lemmatized_list_id | 0x80000000);
-        case POSITIONAL: return Key(term_id);
+        case LEMMATIZED: return Key(terms[termId].lemmatizedListId | 0x80000000);
+        case POSITIONAL: return Key(termId);
     }
     abort();
 }
@@ -337,7 +337,7 @@ Dictionary::PostingsInfo Dictionary::Key::getPostingsInfo() const
     PostingsInfo ret;
     ret.offset = lists[k].offset;
     ret.size = lists[k+1].offset - lists[k].offset;
-    ret.n_postings = lists[k].n_postings;
+    ret.postingCount = lists[k].postingCount;
 
     return ret;
 }
@@ -348,18 +348,18 @@ class PostingsSource
 {
 public:
     struct ReadRq {
-        Dictionary::Key postings_key;
+        Dictionary::Key postingsKey;
         void *data;
     };
 
 private:
     void *memctx;
-    int evfd_rq, evfd_done;
-    int lemmatized_fd, positional_fd;
+    int evfdRq, evfdDone;
+    int lemmatizedFd, positionalFd;
 
     pthread_t thread;
     ReadRq *rqs;
-    int rqs_count, rqs_left;
+    int rqCount, rqLeft;
 
     static int openIndex(const char *filename, uint32_t magic);
     static void* runThreadFunc(void *);
@@ -369,7 +369,7 @@ public:
     PostingsSource();
     ~PostingsSource();
 
-    void start(const char *positional_filename, const char *lemmatized_filename);
+    void start(const char *positionalFilename, const char *lemmatizedFilename);
     void stop();
 
     void request(ReadRq *rqs, int count);
@@ -386,22 +386,22 @@ void PostingsSource::threadFunc()
     for(;;)
     {
         uint64_t foo;
-        eventfd_read(evfd_rq, &foo);
+        eventfd_read(evfdRq, &foo);
 
-        int rqs_count = *(volatile int *)&this->rqs_count;
+        int rqCount = *(volatile int *)&this->rqCount;
         PostingsSource::ReadRq *rqs = *(PostingsSource::ReadRq * volatile *)&this->rqs;
 
-        for(int i=0; i<rqs_count; i++)
+        for(int i=0; i<rqCount; i++)
         {
             IndexType idxtype = 
-                rqs[i].postings_key.getIndexType();
+                rqs[i].postingsKey.getIndexType();
             Dictionary::PostingsInfo info =
-                rqs[i].postings_key.getPostingsInfo();
+                rqs[i].postingsKey.getPostingsInfo();
             
-            int fd = idxtype == LEMMATIZED ? lemmatized_fd : positional_fd;
+            int fd = idxtype == LEMMATIZED ? lemmatizedFd : positionalFd;
             FileIO(fd).read_raw(rqs[i].data, info.size, info.offset);
 
-            eventfd_write(evfd_done, 1);
+            eventfd_write(evfdDone, 1);
         }
     }
 }
@@ -424,7 +424,7 @@ int PostingsSource::openIndex(const char *filename, uint32_t magic)
     return fio.filedes();
 }
 
-void PostingsSource::start(const char *positional_filename, const char *lemmatized_filename)
+void PostingsSource::start(const char *positionalFilename, const char *lemmatizedFilename)
 {
     assert(!memctx);
     memctx = talloc_named_const(NULL, 0, "postings reader");
@@ -432,13 +432,13 @@ void PostingsSource::start(const char *positional_filename, const char *lemmatiz
     
     info("starting postings source...\n");
 
-    evfd_rq = eventfd(0, 0);
-    evfd_done = eventfd(0, 0);
-    assert(evfd_rq != -1 && evfd_done != -1);
+    evfdRq = eventfd(0, 0);
+    evfdDone = eventfd(0, 0);
+    assert(evfdRq != -1 && evfdDone != -1);
 
-    positional_fd = openIndex(positional_filename, 0x50584449);
-    lemmatized_fd = openIndex(lemmatized_filename, 0x4c584449);
-    rqs_left = 0;
+    positionalFd = openIndex(positionalFilename, 0x50584449);
+    lemmatizedFd = openIndex(lemmatizedFilename, 0x4c584449);
+    rqLeft = 0;
 
     int rc = pthread_create(&thread, NULL, &runThreadFunc, this);
     assert(rc == 0); (void)rc;
@@ -450,8 +450,8 @@ void PostingsSource::stop()
 {
     pthread_cancel(thread);
     pthread_join(thread, NULL);
-    close(evfd_rq);
-    close(evfd_done);
+    close(evfdRq);
+    close(evfdDone);
     talloc_free(memctx);
 }
 
@@ -459,26 +459,26 @@ void PostingsSource::request(ReadRq *rqs, int count)
 {
     info("requesting %d posting lists:", count);
     for(int i=0; i<count; i++)
-        info(" 0x%08x", (int)rqs[i].postings_key);
+        info(" 0x%08x", (int)rqs[i].postingsKey);
     info("\n");
 
     if(!count)
         return;
 
     this->rqs = rqs;
-    rqs_count = rqs_left = count;
+    rqCount = rqLeft = count;
 
-    eventfd_write(evfd_rq, 1);
+    eventfd_write(evfdRq, 1);
 }
 
 int PostingsSource::wait(void)
 {
-    if(!rqs_left)
+    if(!rqLeft)
         return 0;
 
     uint64_t val;
-    eventfd_read(evfd_done, &val);
-    rqs_left -= val;
+    eventfd_read(evfdDone, &val);
+    rqLeft -= val;
     info("read %d posting lists\n", (int)val);
     return val;
 }
@@ -493,28 +493,28 @@ struct QueryNode
 
     QueryNode *lhs, *rhs, *parent;
 
-    const char *term_text; /* actual term text */
-    int term_id; /* index of term in dictionary */
-    Dictionary::Key postings_key; /* postings list identifier */
+    const char *termText; /* actual term text */
+    int termId; /* index of term in dictionary */
+    Dictionary::Key postingsKey; /* postings list identifier */
 
-    int estim_postings; /* estimate number of entries in posting list */
+    int estimPostings; /* estimate number of entries in posting list */
     int depth; /* depth of sub-tree */
 
-    int n_postings; /* number of entries in posting list */
+    int postingCount; /* number of entries in posting list */
     void *postings; /* actual posting list */
 };
 
-static long empty_posting_list = -42; /* GLOBAL */
+static long emptyPostingList = -42; /* GLOBAL */
 
 static QueryNode makeEmptyQueryNode()
 {
     QueryNode node;
     node.type = QueryNode::TERM;
     node.lhs = node.rhs = node.parent = NULL;
-    node.term_text = NULL;
-    node.term_id = -1;
-    node.depth = node.estim_postings = node.n_postings = 0;
-    node.postings = &empty_posting_list;
+    node.termText = NULL;
+    node.termId = -1;
+    node.depth = node.estimPostings = node.postingCount = 0;
+    node.postings = &emptyPostingList;
     return node;
 }
 static const QueryNode emptyQueryNode = makeEmptyQueryNode(); /* GLOBAL */
@@ -551,7 +551,7 @@ QueryNode *QueryParser::makeNode(QueryNode::Type type, QueryNode *lhs, QueryNode
     node->rhs = rhs; if(rhs) rhs->parent = node;
     node->lhs = lhs; if(lhs) lhs->parent = node;
     node->parent = NULL;
-    node->term_text = term;
+    node->termText = term;
     return node;
 }
 
@@ -680,7 +680,7 @@ protected:
     void *memctx;
     QueryNode **terms;
     PostingsSource::ReadRq *rqs;
-    int term_count, rqs_count;
+    int termCount, rqCount;
 
     static inline void dumpQueryTree(const QueryNode *node, const char *title);
     static void dumpQueryTree(const QueryNode *node, int indent);
@@ -710,15 +710,15 @@ void QueryEngineBase::dumpQueryTree(const QueryNode *node, int indent)
     switch(node->type) {
         case QueryNode::TERM:
             printf("TERM: »%s« (%d), postings: %d\n",
-                node->term_text, node->term_id, node->n_postings);
+                node->termText, node->termId, node->postingCount);
             return;
         case QueryNode::OR:
-            printf("OR, expected: %d\n", node->estim_postings);
+            printf("OR, expected: %d\n", node->estimPostings);
             dumpQueryTree(node->lhs, 3+indent);
             dumpQueryTree(node->rhs, 3+indent);
             return;
         case QueryNode::AND:
-            printf("AND, expected: %d\n", node->estim_postings);
+            printf("AND, expected: %d\n", node->estimPostings);
             dumpQueryTree(node->lhs, 3+indent);
             dumpQueryTree(node->rhs, 3+indent);
             return;
@@ -740,25 +740,25 @@ void QueryEngineBase::resolveTerms(QueryNode *node, IndexType idxtype)
     if(!node) return;
     if(node->type == QueryNode::TERM)
     {
-        node->term_id =
-            dictionary.lookup(node->term_text, strlen(node->term_text));
+        node->termId =
+            dictionary.lookup(node->termText, strlen(node->termText));
 
-        if(node->term_id == -1) 
+        if(node->termId == -1) 
             info("term »%s« does not appear in dictionary\n",
-                 node->term_text);
+                 node->termText);
         else {
-            node->postings_key =
-                dictionary.getPostingsKey(node->term_id, idxtype);
+            node->postingsKey =
+                dictionary.getPostingsKey(node->termId, idxtype);
             Dictionary::PostingsInfo info =
-                node->postings_key.getPostingsInfo();
-            node->n_postings = info.n_postings;
+                node->postingsKey.getPostingsInfo();
+            node->postingCount = info.postingCount;
 
             info("resolved term »%s« (%d): postings id 0x%08x, has %d postings at 0x%08llx, size %zu\n",
-                  node->term_text, node->term_id, (int)node->postings_key, node->n_postings, (unsigned long long)info.offset, info.size);
+                  node->termText, node->termId, (int)node->postingsKey, node->postingCount, (unsigned long long)info.offset, info.size);
         }
 
-        if(node->n_postings == 0)
-            node->postings = &empty_posting_list;
+        if(node->postingCount == 0)
+            node->postings = &emptyPostingList;
     } 
     resolveTerms(node->lhs, idxtype);
     resolveTerms(node->rhs, idxtype);
@@ -789,24 +789,24 @@ int QueryEngineBase::extractTerms(QueryNode *node, QueryNode **ptr)
 
 void QueryEngineBase::createRqs()
 {
-    rqs_count = 0;
-    for(int i=0; i<term_count; i++)
+    rqCount = 0;
+    for(int i=0; i<termCount; i++)
     {
         if(terms[i]->postings)
             continue;
 
         bool dupli = false;
         for(int j=0; j<i; j++)
-            if(terms[j]->postings_key == terms[i]->postings_key) {
+            if(terms[j]->postingsKey == terms[i]->postingsKey) {
                 info("term %d is duplicate of term %d\n", i,j);
                 dupli = true;
                 break;
             }
         if(dupli) continue;
 
-        PostingsSource::ReadRq *rq = rqs + (rqs_count++);
-        rq->postings_key = terms[i]->postings_key;
-        rq->data = talloc_size(memctx, rq->postings_key.getSize());
+        PostingsSource::ReadRq *rq = rqs + (rqCount++);
+        rq->postingsKey = terms[i]->postingsKey;
+        rq->data = talloc_size(memctx, rq->postingsKey.getSize());
         assert(rq->data);
     }
 }
@@ -816,7 +816,7 @@ void QueryEngineBase::createRqs()
 class BooleanQueryEngine : public QueryEngineBase
 {
     QueryNode **scratchpad;
-    int node_count, stopword_count;
+    int nodeCount, stopwordCount;
 
     static int countStopwords(const QueryNode *node);
 
@@ -841,7 +841,7 @@ public:
 
 int BooleanQueryEngine::countStopwords(const QueryNode *node) {
     if(node->type == QueryNode::TERM)
-        return dictionary.isStopWord(node->term_id);
+        return dictionary.isStopWord(node->termId);
     if(node->type == QueryNode::AND)
         return countStopwords(node->lhs) + countStopwords(node->rhs);
     return 0;
@@ -874,7 +874,7 @@ QueryNode *BooleanQueryEngine::optimize(QueryNode *node)
     /* check node type */
     QueryNode::Type type = node->type;
     if(type == QueryNode::TERM) {
-        node->estim_postings = node->n_postings;
+        node->estimPostings = node->postingCount;
         return node;
     }
 
@@ -900,7 +900,7 @@ QueryNode *BooleanQueryEngine::optimize(QueryNode *node)
      * node; for OR just remove them. */
     if(type == QueryNode::AND) {
         for(QueryNode **p = children; p<end; p++) 
-            if((*p)->estim_postings == 0) {
+            if((*p)->estimPostings == 0) {
                 info("found empty node %p in AND group, emptying whole group\n", (*p));
                 *node = emptyQueryNode;
                 scratchpad = base;
@@ -908,7 +908,7 @@ QueryNode *BooleanQueryEngine::optimize(QueryNode *node)
             }
     } else {
         for(QueryNode **p = children; p<end; ) 
-            if((*p)->estim_postings == 0) {
+            if((*p)->estimPostings == 0) {
                 info("found empty node %p in OR group, removing\n", (*p));
                 *p = *--end;
             } else
@@ -923,7 +923,7 @@ QueryNode *BooleanQueryEngine::optimize(QueryNode *node)
 
         bool dupli = false;
         for(QueryNode **q = children; q<p; q++)
-            if((*q)->type == (*p)->type && (*q)->postings_key == (*p)->postings_key) {
+            if((*q)->type == (*p)->type && (*q)->postingsKey == (*p)->postingsKey) {
                 info("node %p is duplicate of node %p, removing\n", (*p), (*q));
                 dupli = true;
                 break;
@@ -936,10 +936,10 @@ QueryNode *BooleanQueryEngine::optimize(QueryNode *node)
     }
 
     /* remove stopwords */
-    if(type == QueryNode::AND && stopword_count*2 < term_count) 
+    if(type == QueryNode::AND && stopwordCount*2 < termCount) 
         for(QueryNode **p = children; p<end; )
             if((*p)->type != QueryNode::TERM ||
-               !dictionary.isStopWord((*p)->term_id))
+               !dictionary.isStopWord((*p)->termId))
                 p++;
             else 
                 *p = *--end;
@@ -954,17 +954,17 @@ QueryNode *BooleanQueryEngine::optimize(QueryNode *node)
     /* find optimal execution order */
     while(end - children >= 2)
     {
-        /* end[-1] is to be the child with smallest estim_postings and
-           end[-2] is to be the child with second-smalest estim_postings */
-        if(end[-1]->estim_postings > end[-2]->estim_postings)
+        /* end[-1] is to be the child with smallest estimPostings and
+           end[-2] is to be the child with second-smalest estimPostings */
+        if(end[-1]->estimPostings > end[-2]->estimPostings)
             std::swap(end[-1], end[-2]);
 
         for(QueryNode **p = children; p<end-2; p++)
-            if((*p)->estim_postings < end[-1]->estim_postings) {
+            if((*p)->estimPostings < end[-1]->estimPostings) {
                 std::swap(end[-1], end[-2]);
                 std::swap(*p, end[-1]);
             }
-            else if((*p)->estim_postings < end[-2]->estim_postings)
+            else if((*p)->estimPostings < end[-2]->estimPostings)
                 std::swap(*p, end[-2]);
 
         /* set up the new node (reusing one of the old ones)
@@ -977,10 +977,10 @@ QueryNode *BooleanQueryEngine::optimize(QueryNode *node)
             std::swap(v->lhs, v->rhs);
         v->depth = v->lhs->depth + 1;
 
-        v->estim_postings =
+        v->estimPostings =
             type == QueryNode::OR
-                ? v->lhs->estim_postings + v->rhs->estim_postings
-                : std::min(v->lhs->estim_postings, v->rhs->estim_postings);
+                ? v->lhs->estimPostings + v->rhs->estimPostings
+                : std::min(v->lhs->estimPostings, v->rhs->estimPostings);
 
         /* insert the new node in place of the old ones */
         end[-2] = v;
@@ -1002,22 +1002,22 @@ void BooleanQueryEngine::fixParents(QueryNode *node)
 
 void BooleanQueryEngine::processPostings()
 {
-    int rqs_done = 0;
+    int rqDone = 0;
 
     while(int count = posrc.wait())
         while(count--)
         {
-            const PostingsSource::ReadRq *rq = rqs + (rqs_done++);
+            const PostingsSource::ReadRq *rq = rqs + (rqDone++);
 
             Dictionary::PostingsInfo info =
-                rq->postings_key.getPostingsInfo();
+                rq->postingsKey.getPostingsInfo();
             int *decoded =
-                decodePostings(Reader(rq->data, info.size), info.n_postings);
+                decodePostings(Reader(rq->data, info.size), info.postingCount);
 
-            info("processing posting list 0x%08x\n", (int)rq->postings_key);
+            info("processing posting list 0x%08x\n", (int)rq->postingsKey);
 
-            for(int i=0; i<term_count; i++) 
-                if(terms[i]->postings_key == rq->postings_key) {
+            for(int i=0; i<termCount; i++) 
+                if(terms[i]->postingsKey == rq->postingsKey) {
                     terms[i]->postings = decoded;
                     evaluateNode(terms[i]->parent);
                 }
@@ -1055,21 +1055,21 @@ void BooleanQueryEngine::evaluateNode(QueryNode *node)
     else
         abort();
 
-    info("got %d postings\n", node->n_postings);
+    info("got %d postings\n", node->postingCount);
 
     evaluateNode(node->parent);
 }
 
 void BooleanQueryEngine::evaluateAndNode(QueryNode *node)
 {
-    if(node->lhs->n_postings == 0 ||
-       node->rhs->n_postings == 0) {
-        node->postings = &empty_posting_list;
+    if(node->lhs->postingCount == 0 ||
+       node->rhs->postingCount == 0) {
+        node->postings = &emptyPostingList;
         return;
     }
 
-    const int *A = (int *)node->lhs->postings, n = node->lhs->n_postings, *Aend = A + n,
-              *B = (int *)node->rhs->postings, m = node->rhs->n_postings, *Bend = B + m;
+    const int *A = (int *)node->lhs->postings, n = node->lhs->postingCount, *Aend = A + n,
+              *B = (int *)node->rhs->postings, m = node->rhs->postingCount, *Bend = B + m;
 
     int *C = talloc_array(memctx, int, std::min(n,m));
     node->postings = C;
@@ -1083,24 +1083,24 @@ void BooleanQueryEngine::evaluateAndNode(QueryNode *node)
         else 
             *C++ = *A, A++, B++;
 
-    node->n_postings = (C - (int *)node->postings);
+    node->postingCount = (C - (int *)node->postings);
 }
 
 void BooleanQueryEngine::evaluateOrNode(QueryNode *node)
 {
-    if(node->lhs->n_postings == 0) {
+    if(node->lhs->postingCount == 0) {
         node->postings = node->rhs->postings;
-        node->n_postings = node->rhs->n_postings;
+        node->postingCount = node->rhs->postingCount;
         return;
     }
-    if(node->rhs->n_postings == 0) {
+    if(node->rhs->postingCount == 0) {
         node->postings = node->lhs->postings;
-        node->n_postings = node->lhs->n_postings;
+        node->postingCount = node->lhs->postingCount;
         return;
     }
 
-    const int *A = (int *)node->lhs->postings, n = node->lhs->n_postings, *Aend = A + n,
-              *B = (int *)node->rhs->postings, m = node->rhs->n_postings, *Bend = B + m;
+    const int *A = (int *)node->lhs->postings, n = node->lhs->postingCount, *Aend = A + n,
+              *B = (int *)node->rhs->postings, m = node->rhs->postingCount, *Bend = B + m;
 
     int *C = talloc_array(memctx, int, n+m);
     node->postings = C;
@@ -1118,7 +1118,7 @@ void BooleanQueryEngine::evaluateOrNode(QueryNode *node)
     if(B != Bend)
         memcpy(C, B, (Bend - B) * sizeof(int));
 
-    node->n_postings = (C - (int *)node->postings) + (Aend - A) + (Bend - B);
+    node->postingCount = (C - (int *)node->postings) + (Aend - A) + (Bend - B);
 }
 
 void BooleanQueryEngine::printResult(const QueryNode *root)
@@ -1126,9 +1126,9 @@ void BooleanQueryEngine::printResult(const QueryNode *root)
     const int *postings = (const int *)root->postings;
     assert(postings);
 
-    printf("QUERY: %s TOTAL: %d\n", queryText, root->n_postings);
+    printf("QUERY: %s TOTAL: %d\n", queryText, root->postingCount);
     if(!noResults)
-        for(int i=0; i<root->n_postings; i++) 
+        for(int i=0; i<root->postingCount; i++) 
             puts(artitles.getTitle(postings[i]));
 }
 
@@ -1140,25 +1140,25 @@ void BooleanQueryEngine::do_run(QueryNode *root)
     
     dumpQueryTree(root, "raw query:");
 
-    node_count = countNodes(root);
-    stopword_count = countStopwords(root);
+    nodeCount = countNodes(root);
+    stopwordCount = countStopwords(root);
 
-    QueryNode *_scratchpad[node_count]; scratchpad = _scratchpad;
+    QueryNode *_scratchpad[nodeCount]; scratchpad = _scratchpad;
 
-    term_count = countTerms(root);
+    termCount = countTerms(root);
     linearize(root);
     root = optimize(root);
     fixParents(root);
 
     dumpQueryTree(root, "optimized query:");
     
-    term_count = countTerms(root);
-    QueryNode *_terms[term_count]; terms = _terms;
-    PostingsSource::ReadRq _rqs[term_count]; rqs = _rqs;
+    termCount = countTerms(root);
+    QueryNode *_terms[termCount]; terms = _terms;
+    PostingsSource::ReadRq _rqs[termCount]; rqs = _rqs;
 
     extractTerms(root, terms);
     createRqs();
-    posrc.request(rqs, rqs_count);
+    posrc.request(rqs, rqCount);
     processPostings();
     printResult(root);
 }
@@ -1168,21 +1168,21 @@ void BooleanQueryEngine::do_run(QueryNode *root)
 
 class PhraseQueryEngine : public QueryEngineBase
 {
-    struct doc {
-        int doc_id, positions_offs;
+    struct Doc {
+        int docId, positionsOffs;
     };
 
     typedef unsigned short pos_t;
     
     int *offsets;
-    struct doc *docs, *docs_rdptr, *docs_wrptr, *docs_end;
-    pos_t *positions, *positions_wrptr;
+    struct Doc *docs, *docsRdptr, *docsWrptr, *docsEnd;
+    pos_t *positions, *positionsWrptr;
 
     inline void sortTerms();
     inline void processPostings();
-    void processTerm(Reader rd, int n_postings, int offset) __attribute__((hot));
-    inline void processDocument(int doc_id, Reader prd, int offset) __attribute__((hot));
-    inline void makeWorkingSet(Reader rd, int n_postings, int offset) __attribute__((hot));
+    void processTerm(Reader rd, int postingCount, int offset) __attribute__((hot));
+    inline void processDocument(int docId, Reader prd, int offset) __attribute__((hot));
+    inline void makeWorkingSet(Reader rd, int postingCount, int offset) __attribute__((hot));
     inline void printResult();
     
     void do_run(QueryNode *root);
@@ -1195,11 +1195,11 @@ public:
 
 void PhraseQueryEngine::sortTerms()
 {
-    for(int i=0; i<term_count; i++)
-        offsets[i] = term_count-1-i;
+    for(int i=0; i<termCount; i++)
+        offsets[i] = termCount-1-i;
 
-    for(int i=0; i<term_count; i++)
-        for(int j=i; j > 0 && terms[j]->n_postings < terms[j-1]->n_postings; j--) {
+    for(int i=0; i<termCount; i++)
+        for(int j=i; j > 0 && terms[j]->postingCount < terms[j-1]->postingCount; j--) {
             std::swap(terms[j], terms[j-1]);
             std::swap(offsets[j], offsets[j-1]);
         }
@@ -1207,183 +1207,183 @@ void PhraseQueryEngine::sortTerms()
 
 void PhraseQueryEngine::processPostings()
 {
-    int rqs_done = 0;
+    int rqDone = 0;
 
     while(int count = posrc.wait())
         while(count--)
         {
-            const PostingsSource::ReadRq *rq = rqs + (rqs_done++);
+            const PostingsSource::ReadRq *rq = rqs + (rqDone++);
 
             Dictionary::PostingsInfo info =
-                rq->postings_key.getPostingsInfo();
+                rq->postingsKey.getPostingsInfo();
             Reader rd(rq->data, info.size);
 
-            info("processing posting list 0x%08x\n", (int)rq->postings_key);
+            info("processing posting list 0x%08x\n", (int)rq->postingsKey);
 
-            for(int i=0; i<term_count; i++) 
-                if(terms[i]->postings_key == rq->postings_key)
-                    processTerm(rd, info.n_postings, offsets[i]);
+            for(int i=0; i<termCount; i++) 
+                if(terms[i]->postingsKey == rq->postingsKey)
+                    processTerm(rd, info.postingCount, offsets[i]);
         }
 }
 
-void PhraseQueryEngine::processTerm(Reader rd, int n_postings, int offset)
+void PhraseQueryEngine::processTerm(Reader rd, int postingCount, int offset)
 {
     /* check if we have something to merge with */
     if(unlikely(!docs)) {
-        makeWorkingSet(rd, n_postings, offset);
+        makeWorkingSet(rd, postingCount, offset);
         return;
     }
 
     /* but the figers at start */
-    docs_rdptr = docs_wrptr = docs;
-    positions_wrptr = positions;
+    docsRdptr = docsWrptr = docs;
+    positionsWrptr = positions;
 
     /* where the positions data in bytestream start */
-    int positions_offset = 4 + rd.read_u32();
+    int positionsOffset = 4 + rd.read_u32();
 
     /* read the first document info */
-    int doc_id = rd.read_u24(),
-        positions_size = rd.read_uv();
+    int docId = rd.read_u24(),
+        positionsSize = rd.read_uv();
 
     /* while there are documents left both in bytestream and in our working set */
-    while(n_postings-- && docs_rdptr < docs_end)
+    while(postingCount-- && docsRdptr < docsEnd)
     {
         /* create the reader for positions and process the document */
-        Reader prd((const char *)rd.buffer() + positions_offset, positions_size);
-        processDocument(doc_id, prd, offset);
+        Reader prd((const char *)rd.buffer() + positionsOffset, positionsSize);
+        processDocument(docId, prd, offset);
 
         /* move on to the next document */
-        positions_offset += positions_size;
-        if(n_postings) {
-            doc_id += rd.read_uv();
-            positions_size = rd.read_uv();
+        positionsOffset += positionsSize;
+        if(postingCount) {
+            docId += rd.read_uv();
+            positionsSize = rd.read_uv();
         }
     }
 
     /* remember how many documents we have */
-    docs_end = docs_wrptr;
+    docsEnd = docsWrptr;
 }
 
-void PhraseQueryEngine::processDocument(int doc_id, Reader prd, int offset)
+void PhraseQueryEngine::processDocument(int docId, Reader prd, int offset)
 {
     /* skip past any documents earlier than this */
-    while(docs_rdptr < docs_end && docs_rdptr->doc_id < doc_id)
-        docs_rdptr++;
+    while(docsRdptr < docsEnd && docsRdptr->docId < docId)
+        docsRdptr++;
 
     /* check if our document has been found */
-    if(docs_rdptr >= docs_end || docs_rdptr->doc_id > doc_id)
+    if(docsRdptr >= docsEnd || docsRdptr->docId > docId)
         return;
 
     /* fetch the document, remember where its positions start */
-    struct doc doc = *docs_rdptr;
-    const pos_t *positions_rdptr = positions + doc.positions_offs;
+    struct Doc doc = *docsRdptr;
+    const pos_t *positionsRdptr = positions + doc.positionsOffs;
 
     /* move the positions to the current writing finger */
-    doc.positions_offs = positions_wrptr - positions;
+    doc.positionsOffs = positionsWrptr - positions;
 
     /* merge positions. all of them are incremented by 'offset' */
     pos_t p = offset;
-    while(!prd.eof() && *positions_rdptr != (pos_t)-1)
+    while(!prd.eof() && *positionsRdptr != (pos_t)-1)
     {
         /* get the next position */
         p += prd.read_uv();
         /* skip past position earlier than this */
-        while(*positions_rdptr < p) positions_rdptr++;
+        while(*positionsRdptr < p) positionsRdptr++;
         /* write the position back, if found */
-        if(*positions_rdptr == p)
-            *positions_wrptr++ = p;
+        if(*positionsRdptr == p)
+            *positionsWrptr++ = p;
     }
 
     /* if any position was written, terminate the positions
      * list with maxval and write the document back */
-    if(positions_wrptr - positions > doc.positions_offs) {
-        *positions_wrptr++ = (pos_t)-1;
-        *docs_wrptr++ = doc;
+    if(positionsWrptr - positions > doc.positionsOffs) {
+        *positionsWrptr++ = (pos_t)-1;
+        *docsWrptr++ = doc;
     }
 }
 
 
-void PhraseQueryEngine::makeWorkingSet(Reader rd, int n_postings, int offset)
+void PhraseQueryEngine::makeWorkingSet(Reader rd, int postingCount, int offset)
 {
     /* find out where positions start */
-    int positions_offset = 4 + rd.read_u32();
+    int positionsOffset = 4 + rd.read_u32();
 
     /* allocate memory (positions may be bigger than necessary) */
-    docs = talloc_array(memctx, struct doc, n_postings);
-    positions = talloc_array(memctx, pos_t, rd.size() - positions_offset + n_postings);
+    docs = talloc_array(memctx, struct Doc, postingCount);
+    positions = talloc_array(memctx, pos_t, rd.size() - positionsOffset + postingCount);
     assert(docs && positions);
 
     /* set up writing fingers */
-    docs_wrptr = docs;
-    positions_wrptr = positions;
+    docsWrptr = docs;
+    positionsWrptr = positions;
 
     /* read the first document info */
-    int doc_id = rd.read_u24(),
-        positions_size = rd.read_uv();
+    int docId = rd.read_u24(),
+        positionsSize = rd.read_uv();
 
     /* while there are documents left both in bytestream and in our buffer */
-    while(n_postings--)
+    while(postingCount--)
     {
         /* create the reader for positions and process the document */
-        Reader prd((const char *)rd.buffer() + positions_offset, positions_size);
+        Reader prd((const char *)rd.buffer() + positionsOffset, positionsSize);
 
         /* write the doc */
-        docs_wrptr->doc_id = doc_id;
-        docs_wrptr->positions_offs = positions_wrptr - positions;
-        docs_wrptr++;
+        docsWrptr->docId = docId;
+        docsWrptr->positionsOffs = positionsWrptr - positions;
+        docsWrptr++;
 
         /* write the positions */
         pos_t p = offset;
         while(!prd.eof()) {
             p += prd.read_uv();
-            *positions_wrptr++ = p;
+            *positionsWrptr++ = p;
         }
         /* terminate the positions list with maxval */
-        *positions_wrptr++ = (pos_t)-1;
+        *positionsWrptr++ = (pos_t)-1;
 
         /* move on to the next document */
-        positions_offset += positions_size;
-        if(n_postings) {
-            doc_id += rd.read_uv();
-            positions_size = rd.read_uv();
+        positionsOffset += positionsSize;
+        if(postingCount) {
+            docId += rd.read_uv();
+            positionsSize = rd.read_uv();
         }
     }
 
     /* remember how many documents we have */
-    docs_end = docs_wrptr;
+    docsEnd = docsWrptr;
 }
 
 void PhraseQueryEngine::printResult()
 {
-    int n_documents = docs_end - docs;
-    printf("QUERY: %s TOTAL: %d\n", queryText, n_documents);
+    int documentCount = docsEnd - docs;
+    printf("QUERY: %s TOTAL: %d\n", queryText, documentCount);
     if(!noResults)
-        for(int i=0; i<n_documents; i++) 
-            puts(artitles.getTitle(docs[i].doc_id));
+        for(int i=0; i<documentCount; i++) 
+            puts(artitles.getTitle(docs[i].docId));
 }
 
 void PhraseQueryEngine::do_run(QueryNode *root)
 {
     memctx = talloc_parent(root);
-    docs = docs_rdptr = docs_wrptr = docs_end = NULL;
-    positions = positions_wrptr = NULL;
+    docs = docsRdptr = docsWrptr = docsEnd = NULL;
+    positions = positionsWrptr = NULL;
 
     resolveTerms(root, POSITIONAL);
     
     dumpQueryTree(root, "raw query:");
 
-    term_count = countTerms(root);
+    termCount = countTerms(root);
 
-    QueryNode *_terms[term_count]; terms = _terms;
-    PostingsSource::ReadRq _rqs[term_count]; rqs = _rqs;
-    int _offsets[term_count]; offsets = _offsets;
+    QueryNode *_terms[termCount]; terms = _terms;
+    PostingsSource::ReadRq _rqs[termCount]; rqs = _rqs;
+    int _offsets[termCount]; offsets = _offsets;
 
     extractTerms(root, terms);
     sortTerms();
 
-    if(term_count && terms[0]->postings_key.getNPostings()) {
+    if(termCount && terms[0]->postingsKey.getPostingCount()) {
         createRqs();
-        posrc.request(rqs, rqs_count);
+        posrc.request(rqs, rqCount);
         processPostings();
     }
 
@@ -1395,33 +1395,33 @@ void PhraseQueryEngine::do_run(QueryNode *root)
 
 class FreeTextQueryEngine : public QueryEngineBase
 {
-    struct doc {
-        int doc_id;
+    struct Doc {
+        int docId;
         float weight;
-        inline bool operator<(const doc &d) const {
+        inline bool operator<(const struct Doc &d) const {
             return likely(weight != d.weight)
                     ? weight > d.weight
-                    : doc_id < doc_id;
+                    : docId < docId;
         }
     };
 
-    struct term_weights {
-        float query_tf, idf;
+    struct TermWeights {
+        float queryTf, idf;
     };
 
-    float query_weight;
-    struct term_weights *weights;
-    struct doc *docs;
-    int n_docs;
+    float queryWeight;
+    struct TermWeights *weights;
+    struct Doc *docs;
+    int docCount;
 
-    static int n_marked, *markedDocs;
+    static int markedDocCount, *markedDocs;
 
     static inline void fetchMarkedDocs();
     inline void prepareTerms();
     inline void processPostings();
-    inline struct doc *decodePostings(Reader rd, int count, struct term_weights w);
-    void trimPostings(struct doc *postings, int *pn_postings);
-    void processTerm(struct doc *postings, int n_postings);
+    inline struct Doc *decodePostings(Reader rd, int count, struct TermWeights w);
+    void trimPostings(struct Doc *postings, int *ppostingCount);
+    void processTerm(struct Doc *postings, int postingCount);
     inline void includePageRank();
     inline void sortResult();
     inline void printResult();
@@ -1434,199 +1434,199 @@ public:
     }
 };
 
-int FreeTextQueryEngine::n_marked = -1,
+int FreeTextQueryEngine::markedDocCount = -1,
     *FreeTextQueryEngine::markedDocs = NULL; /* GLOBAL (ehh, static actually) */
 
 void FreeTextQueryEngine::fetchMarkedDocs()
 {
-    if(!onlyMarkedDocs || n_marked >= 0)
+    if(!onlyMarkedDocs || markedDocCount >= 0)
         return;
 
     info("fetching marked documents\n");
 
-    int marker_term_id = dictionary.lookup("\"m", 2);
-    assert(marker_term_id != -1);
+    int markerTermId = dictionary.lookup("\"m", 2);
+    assert(markerTermId != -1);
 
     PostingsSource::ReadRq rq;
-    rq.postings_key = dictionary.getPostingsKey(marker_term_id, LEMMATIZED);
-    rq.data = talloc_size(NULL, rq.postings_key.getSize());
+    rq.postingsKey = dictionary.getPostingsKey(markerTermId, LEMMATIZED);
+    rq.data = talloc_size(NULL, rq.postingsKey.getSize());
     assert(rq.data);
 
     posrc.request(&rq, 1);
     int done = posrc.wait();
     assert(done == 1);
 
-    n_marked = rq.postings_key.getNPostings();
-    markedDocs = talloc_array(NULL, int, n_marked);
+    markedDocCount = rq.postingsKey.getPostingCount();
+    markedDocs = talloc_array(NULL, int, markedDocCount);
     assert(markedDocs);
 
-    Reader rd(rq.data, rq.postings_key.getSize());
-    for(int i=0; i<n_marked; i++) {
+    Reader rd(rq.data, rq.postingsKey.getSize());
+    for(int i=0; i<markedDocCount; i++) {
         markedDocs[i] =
             (i == 0) ? rd.read_u24() : markedDocs[i-1] + rd.read_uv();
         rd.read_uv();
     }
 
     talloc_free(rq.data);
-    info("got %d marked documents\n", n_marked);
+    info("got %d marked documents\n", markedDocCount);
 }
 
 void FreeTextQueryEngine::prepareTerms()
 {
-    for(int i=0; i<term_count; i++)
-        for(int j=i; j > 0 && terms[j]->n_postings < terms[j-1]->n_postings; j--) 
+    for(int i=0; i<termCount; i++)
+        for(int j=i; j > 0 && terms[j]->postingCount < terms[j-1]->postingCount; j--) 
             std::swap(terms[j], terms[j-1]);
 
-    int tc = term_count;
-    term_count = 0;
+    int tc = termCount;
+    termCount = 0;
 
     for(int i=0; i<tc; i++)
     {
         int repcnt = 1;
-        while(i+1 < tc && terms[i+1]->postings_key == terms[i]->postings_key)
+        while(i+1 < tc && terms[i+1]->postingsKey == terms[i]->postingsKey)
             i++, repcnt++;
 
-        terms[term_count] = terms[i];
+        terms[termCount] = terms[i];
 
-        weights[term_count].idf =
+        weights[termCount].idf =
             logf((float)artitles.size() /
-                 (float)terms[i]->postings_key.getNPostings());
-        weights[term_count].query_tf =
+                 (float)terms[i]->postingsKey.getPostingCount());
+        weights[termCount].queryTf =
             (float)repcnt / (float)tc;
         
-        term_count++;
+        termCount++;
     }
 
-    query_weight = 0;
-    for(int i=0; i<term_count; i++)
-        query_weight += square(weights[i].query_tf * weights[i].idf);
-    query_weight = 1.f/sqrtf(query_weight);
+    queryWeight = 0;
+    for(int i=0; i<termCount; i++)
+        queryWeight += square(weights[i].queryTf * weights[i].idf);
+    queryWeight = 1.f/sqrtf(queryWeight);
 }
 
 void FreeTextQueryEngine::processPostings()
 {
-    int rqs_done = 0;
+    int rqDone = 0;
 
     while(int count = posrc.wait())
         while(count--)
         {
-            const PostingsSource::ReadRq *rq = rqs + rqs_done;
-            assert(terms[rqs_done]->postings_key == rq->postings_key);
+            const PostingsSource::ReadRq *rq = rqs + rqDone;
+            assert(terms[rqDone]->postingsKey == rq->postingsKey);
 
             Dictionary::PostingsInfo info =
-                rq->postings_key.getPostingsInfo();
-            struct doc *decoded =
-                decodePostings(Reader(rq->data, info.size), info.n_postings, weights[rqs_done]);
+                rq->postingsKey.getPostingsInfo();
+            struct Doc *decoded =
+                decodePostings(Reader(rq->data, info.size), info.postingCount, weights[rqDone]);
 
-            info("processing posting list 0x%08x\n", (int)rq->postings_key);
+            info("processing posting list 0x%08x\n", (int)rq->postingsKey);
 
-            int n_postings = info.n_postings;
-            trimPostings(decoded, &n_postings);
+            int postingCount = info.postingCount;
+            trimPostings(decoded, &postingCount);
             
-            processTerm(decoded, n_postings);
+            processTerm(decoded, postingCount);
 
-            rqs_done++;
+            rqDone++;
         }
 }
 
-FreeTextQueryEngine::doc *FreeTextQueryEngine::decodePostings(Reader rd, int count, struct term_weights w)
+FreeTextQueryEngine::Doc *FreeTextQueryEngine::decodePostings(Reader rd, int count, struct TermWeights w)
 {
     if(count == 0)
         return NULL;
 
-    struct doc *ret = talloc_array(memctx, struct doc, count);
+    struct Doc *ret = talloc_array(memctx, struct Doc, count);
     assert(ret);
 
     for(int i=0; i<count; i++)
     {
-        ret[i].doc_id =
-            (i == 0) ? rd.read_u24() : ret[i-1].doc_id + rd.read_uv();
-        float doc_tf =
-            (float)rd.read_uv() / (float)artitles.getTermCount(ret[i].doc_id);
-        float doc_weight = artitles.getTfIdfWeight(ret[i].doc_id);
-        ret[i].weight = w.query_tf*w.idf * doc_tf*w.idf * query_weight * doc_weight;
+        ret[i].docId =
+            (i == 0) ? rd.read_u24() : ret[i-1].docId + rd.read_uv();
+        float docTf =
+            (float)rd.read_uv() / (float)artitles.getTermCount(ret[i].docId);
+        float docWeight = artitles.getTfIdfWeight(ret[i].docId);
+        ret[i].weight = w.queryTf*w.idf * docTf*w.idf * queryWeight * docWeight;
     }
 
     return ret;
 }
 
-void FreeTextQueryEngine::trimPostings(struct doc *postings, int *pn_postings)
+void FreeTextQueryEngine::trimPostings(struct Doc *postings, int *ppostingCount)
 {
     if(!onlyMarkedDocs)
         return;
 
-    int n = *pn_postings, m = n_marked;
-    struct doc *A = postings, *Aend = postings+n, *C = postings;
+    int n = *ppostingCount, m = markedDocCount;
+    struct Doc *A = postings, *Aend = postings+n, *C = postings;
     const int *B = markedDocs, *Bend = B+m;
     
     while(A < Aend && B < Bend)
-        if(A->doc_id < *B)
+        if(A->docId < *B)
             A++;
-        else if(A->doc_id > *B)
+        else if(A->docId > *B)
             B++;
         else
             *C++ = *A, A++, B++;
 
-    *pn_postings = C - postings;
+    *ppostingCount = C - postings;
 }
 
-void FreeTextQueryEngine::processTerm(struct doc *postings, int n_postings)
+void FreeTextQueryEngine::processTerm(struct Doc *postings, int postingCount)
 {
     if(!docs) {
         docs = postings;
-        n_docs = n_postings;
+        docCount = postingCount;
         return;
     }
     if(!postings)
         return;
 
-    int n = n_postings, m = n_docs;
-    const struct doc *A = postings, *Aend = A+n,
+    int n = postingCount, m = docCount;
+    const struct Doc *A = postings, *Aend = A+n,
                      *B = docs, *Bend = B+m;
 
-    struct doc *C = talloc_array(memctx, struct doc, n+m);
+    struct Doc *C = talloc_array(memctx, struct Doc, n+m);
     docs = C;
     assert(C);
     
     while(A < Aend && B < Bend)
-        if(A->doc_id < B->doc_id)
+        if(A->docId < B->docId)
             *C++ = *A++;
-        else if(A->doc_id > B->doc_id)
+        else if(A->docId > B->docId)
             *C++ = *B++;
         else {
-            C->doc_id = A->doc_id;
+            C->docId = A->docId;
             C->weight = A->weight + B->weight;
             C++, A++, B++;
         }
     if(A != Aend)
-        memcpy(C, A, (Aend - A) * sizeof(struct doc));
+        memcpy(C, A, (Aend - A) * sizeof(struct Doc));
     if(B != Bend)
-        memcpy(C, B, (Bend - B) * sizeof(struct doc));
+        memcpy(C, B, (Bend - B) * sizeof(struct Doc));
 
-    n_docs = (C - docs) + (Aend - A) + (Bend - B);
+    docCount = (C - docs) + (Aend - A) + (Bend - B);
 }
 
 void FreeTextQueryEngine::includePageRank()
 {
-    for(int i=0; i<n_docs; i++)
+    for(int i=0; i<docCount; i++)
         docs[i].weight =
             tfidfFactor*docs[i].weight +
-            pageRankFactor*artitles.getPageRank(docs[i].doc_id);
+            pageRankFactor*artitles.getPageRank(docs[i].docId);
 }
 
 void FreeTextQueryEngine::sortResult()
 {
-    std::sort(docs, docs+n_docs);
+    std::sort(docs, docs+docCount);
 }
 
 void FreeTextQueryEngine::printResult()
 {
-    int n = onlyBestDocs && onlyBestDocs < n_docs ? onlyBestDocs : n_docs;
-    printf("QUERY: %s TOTAL: %d\n", queryText, n_docs);
+    int n = onlyBestDocs && onlyBestDocs < docCount ? onlyBestDocs : docCount;
+    printf("QUERY: %s TOTAL: %d\n", queryText, docCount);
     if(!noResults)
         for(int i=0; i<n; i++) 
             printf("%d: %s (%.2lf%%)\n", 
-                    i+1, artitles.getTitle(docs[i].doc_id),
+                    i+1, artitles.getTitle(docs[i].docId),
                     100.f*docs[i].weight);
 }
 
@@ -1635,22 +1635,22 @@ void FreeTextQueryEngine::do_run(QueryNode *root)
     memctx = talloc_parent(root);
     weights = NULL;
     docs = NULL;
-    n_docs = 0;
+    docCount = 0;
 
     resolveTerms(root, LEMMATIZED);
     
     dumpQueryTree(root, "raw query:");
 
-    term_count = countTerms(root);
+    termCount = countTerms(root);
 
-    QueryNode *_terms[term_count]; terms = _terms;
-    PostingsSource::ReadRq _rqs[term_count]; rqs = _rqs;
-    struct term_weights _weights[term_count]; weights = _weights;
+    QueryNode *_terms[termCount]; terms = _terms;
+    PostingsSource::ReadRq _rqs[termCount]; rqs = _rqs;
+    struct TermWeights _weights[termCount]; weights = _weights;
 
     extractTerms(root, terms);
     prepareTerms();
     createRqs();
-    posrc.request(rqs, rqs_count);
+    posrc.request(rqs, rqCount);
     processPostings();
     includePageRank();
     sortResult();
