@@ -22,6 +22,9 @@ static float pageRankFactor = 0.6, tfidfFactor = 0.4;
 #define info(fmt, ...) \
     do { if(unlikely(verbose)) printf(fmt, ## __VA_ARGS__); } while (0)
 
+template<typename T>
+static inline T square(const T &x) { return x*x; }
+
 /* -------------------------------------------------------------------------- */
 
 class Timer
@@ -181,7 +184,6 @@ public:
     inline int size() const { return term_count; }
     int lookup(const char *text, size_t len) const;
     inline bool isStopWord(int term_id) const;
-    inline float getIDF(int term_id) const;
     inline Key getPostingsKey(int term_id, IndexType idxtype) const;
 };
 
@@ -311,10 +313,6 @@ int Dictionary::lookup(const char *text, size_t len) const
 
 bool Dictionary::isStopWord(int term_id) const {
     return terms[term_id].stop;
-}
-float Dictionary::getIDF(int term_id) const {
-    int k = lemmatized[terms[term_id].lemmatized_list_id].n_postings;
-    return logf((float)artitles.size() / (float)k);
 }
 
 Dictionary::Key Dictionary::getPostingsKey(int term_id, IndexType idxtype) const
@@ -1407,14 +1405,21 @@ class FreeTextQueryEngine : public QueryEngineBase
         }
     };
 
-    int *repetitions;
+    struct term_weights {
+        float query_tf, idf;
+    };
+
+    float query_weight;
+    struct term_weights *weights;
     struct doc *docs;
     int n_docs;
 
+    static int n_marked, *markedDocs;
+
+    static inline void fetchMarkedDocs();
     inline void prepareTerms();
     inline void processPostings();
-    static inline float computeWeight(int n_postings, int n_reps, int doc_id, int n_pos);
-    inline struct doc *decodePostings(Reader rd, int count, int n_reps);
+    inline struct doc *decodePostings(Reader rd, int count, struct term_weights w);
     void trimPostings(struct doc *postings, int *pn_postings);
     void processTerm(struct doc *postings, int n_postings);
     inline void includePageRank();
@@ -1428,6 +1433,43 @@ public:
         FreeTextQueryEngine().do_run(root);
     }
 };
+
+int FreeTextQueryEngine::n_marked = -1,
+    *FreeTextQueryEngine::markedDocs = NULL; /* GLOBAL (ehh, static actually) */
+
+void FreeTextQueryEngine::fetchMarkedDocs()
+{
+    if(!onlyMarkedDocs || n_marked >= 0)
+        return;
+
+    info("fetching marked documents\n");
+
+    int marker_term_id = dictionary.lookup("\"m", 2);
+    assert(marker_term_id != -1);
+
+    PostingsSource::ReadRq rq;
+    rq.postings_key = dictionary.getPostingsKey(marker_term_id, LEMMATIZED);
+    rq.data = talloc_size(NULL, rq.postings_key.getSize());
+    assert(rq.data);
+
+    posrc.request(&rq, 1);
+    int done = posrc.wait();
+    assert(done == 1);
+
+    n_marked = rq.postings_key.getNPostings();
+    markedDocs = talloc_array(NULL, int, n_marked);
+    assert(markedDocs);
+
+    Reader rd(rq.data, rq.postings_key.getSize());
+    for(int i=0; i<n_marked; i++) {
+        markedDocs[i] =
+            (i == 0) ? rd.read_u24() : markedDocs[i-1] + rd.read_uv();
+        rd.read_uv();
+    }
+
+    talloc_free(rq.data);
+    info("got %d marked documents\n", n_marked);
+}
 
 void FreeTextQueryEngine::prepareTerms()
 {
@@ -1443,10 +1485,22 @@ void FreeTextQueryEngine::prepareTerms()
         int repcnt = 1;
         while(i+1 < tc && terms[i+1]->postings_key == terms[i]->postings_key)
             i++, repcnt++;
+
         terms[term_count] = terms[i];
-        repetitions[term_count] = repcnt;
+
+        weights[term_count].idf =
+            logf((float)artitles.size() /
+                 (float)terms[i]->postings_key.getNPostings());
+        weights[term_count].query_tf =
+            (float)repcnt / (float)tc;
+        
         term_count++;
     }
+
+    query_weight = 0;
+    for(int i=0; i<term_count; i++)
+        query_weight += square(weights[i].query_tf * weights[i].idf);
+    query_weight = 1.f/sqrtf(query_weight);
 }
 
 void FreeTextQueryEngine::processPostings()
@@ -1462,13 +1516,12 @@ void FreeTextQueryEngine::processPostings()
             Dictionary::PostingsInfo info =
                 rq->postings_key.getPostingsInfo();
             struct doc *decoded =
-                decodePostings(Reader(rq->data, info.size), info.n_postings, repetitions[rqs_done]);
+                decodePostings(Reader(rq->data, info.size), info.n_postings, weights[rqs_done]);
 
             info("processing posting list 0x%08x\n", (int)rq->postings_key);
 
             int n_postings = info.n_postings;
-            if(onlyMarkedDocs)
-                trimPostings(decoded, &n_postings);
+            trimPostings(decoded, &n_postings);
             
             processTerm(decoded, n_postings);
 
@@ -1476,27 +1529,22 @@ void FreeTextQueryEngine::processPostings()
         }
 }
 
-float FreeTextQueryEngine::computeWeight(int n_postings, int n_reps, int doc_id, int n_pos)
-{
-    float idf = logf((float)artitles.size() / (float)n_postings);
-    float tf = (float)n_pos / artitles.getTermCount(doc_id);
-    float weight = artitles.getTfIdfWeight(doc_id);
-    return tf*idf * (float)n_reps*idf * weight;
-}
-
-FreeTextQueryEngine::doc *FreeTextQueryEngine::decodePostings(Reader rd, int count, int n_reps)
+FreeTextQueryEngine::doc *FreeTextQueryEngine::decodePostings(Reader rd, int count, struct term_weights w)
 {
     if(count == 0)
         return NULL;
-    
+
     struct doc *ret = talloc_array(memctx, struct doc, count);
     assert(ret);
 
-    ret[0].doc_id = rd.read_u24(); 
-    ret[0].weight = computeWeight(count, n_reps, ret[0].doc_id, rd.read_uv());
-    for(int i=1; i<count; i++) {
-        ret[i].doc_id = ret[i-1].doc_id + rd.read_uv(); 
-        ret[i].weight = computeWeight(count, n_reps, ret[i].doc_id, rd.read_uv());
+    for(int i=0; i<count; i++)
+    {
+        ret[i].doc_id =
+            (i == 0) ? rd.read_u24() : ret[i-1].doc_id + rd.read_uv();
+        float doc_tf =
+            (float)rd.read_uv() / (float)artitles.getTermCount(ret[i].doc_id);
+        float doc_weight = artitles.getTfIdfWeight(ret[i].doc_id);
+        ret[i].weight = w.query_tf*w.idf * doc_tf*w.idf * query_weight * doc_weight;
     }
 
     return ret;
@@ -1504,6 +1552,22 @@ FreeTextQueryEngine::doc *FreeTextQueryEngine::decodePostings(Reader rd, int cou
 
 void FreeTextQueryEngine::trimPostings(struct doc *postings, int *pn_postings)
 {
+    if(!onlyMarkedDocs)
+        return;
+
+    int n = *pn_postings, m = n_marked;
+    struct doc *A = postings, *Aend = postings+n, *C = postings;
+    const int *B = markedDocs, *Bend = B+m;
+    
+    while(A < Aend && B < Bend)
+        if(A->doc_id < *B)
+            A++;
+        else if(A->doc_id > *B)
+            B++;
+        else
+            *C++ = *A, A++, B++;
+
+    *pn_postings = C - postings;
 }
 
 void FreeTextQueryEngine::processTerm(struct doc *postings, int n_postings)
@@ -1561,14 +1625,15 @@ void FreeTextQueryEngine::printResult()
     printf("QUERY: %s TOTAL: %d\n", queryText, n_docs);
     if(!noResults)
         for(int i=0; i<n; i++) 
-            printf("%d: %s (%lf)\n", 
-                    i+1, artitles.getTitle(docs[i].doc_id), docs[i].weight);
+            printf("%d: %s (%.2lf%%)\n", 
+                    i+1, artitles.getTitle(docs[i].doc_id),
+                    100.f*docs[i].weight);
 }
 
 void FreeTextQueryEngine::do_run(QueryNode *root)
 {
     memctx = talloc_parent(root);
-    repetitions = NULL;
+    weights = NULL;
     docs = NULL;
     n_docs = 0;
 
@@ -1580,7 +1645,7 @@ void FreeTextQueryEngine::do_run(QueryNode *root)
 
     QueryNode *_terms[term_count]; terms = _terms;
     PostingsSource::ReadRq _rqs[term_count]; rqs = _rqs;
-    int _repetitions[term_count]; repetitions = _repetitions;
+    struct term_weights _weights[term_count]; weights = _weights;
 
     extractTerms(root, terms);
     prepareTerms();
@@ -1595,8 +1660,10 @@ void FreeTextQueryEngine::do_run(QueryNode *root)
 
 /* -------------------------------------------------------------------------- */
 
-static void print_usage(void) __attribute__((noreturn));
-static void print_usage(void) {
+static void print_usage(const char *progname, const char *reason) __attribute__((noreturn));
+static void print_usage(const char *progname, const char *reason) {
+    if(reason)
+        fprintf(stderr, "%s: %s\n", progname, reason);
     fprintf(stderr, "usage: search [-v] [-r] [-m] [-b x] [-h] [-f x:y]\n"
                     "  -v: print verbose progress information\n"
                     "  -r: do not print title results\n"
@@ -1609,7 +1676,7 @@ static void print_usage(void) {
 
 int main(int argc, char *argv[])
 {
-    while(int opt = getopt(argc, argv, "vrhb:"))
+    while(int opt = getopt(argc, argv, "vrhb:f:"))
         if(opt == -1) break;
         else switch(opt) {
             case 'v': verbose = true; break;
@@ -1618,21 +1685,21 @@ int main(int argc, char *argv[])
             case 'b': {
                 char *end;
                 onlyBestDocs = strtol(optarg, &end, 0);
-                if(end == optarg || *end != '\0') print_usage();
+                if(end == optarg || *end != '\0') print_usage(argv[0], "unable to parse switch argument -- 'b'");
                 break;
             }
             case 'f': {
                 char *end, *end2;
                 pageRankFactor = strtof(optarg, &end);
-                if(end == optarg || *end != ':') print_usage();
+                if(end == optarg || *end != ':') print_usage(argv[0], "unable to parse switch argument -- 'f'");
                 tfidfFactor = strtof(end+1, &end2);
-                if(end2 == end+1 || *end2 != '\0') print_usage();
+                if(end2 == end+1 || *end2 != '\0') print_usage(argv[0], "unable to parse switch argument -- 'f'");
                 break;
             }
             case 'h':
-            default: print_usage();
+            default: print_usage(NULL, NULL);
         }
-    if(optind < argc) print_usage();
+    if(optind < argc) print_usage(argv[0], "unrecognized switches");
 
     artitles.read("db/artitles");
     dictionary.read("db/dictionary");
