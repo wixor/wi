@@ -150,6 +150,7 @@ dla każdego słowa:
 ... 0d. Plik wikilinks:
 
 u32: magiczna liczba ('LINK')
+u32: liczba artykułów
 dla każdego artykułu:
 	u16: liczba linków wychodzących
 	dla każdego linku:
