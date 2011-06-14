@@ -147,6 +147,14 @@ dla każdego słowa:
     u32: id słowa na dolnych 24 bitach, ilość baz na górnych 8 bitach
     u32[]: id kolejnych baz słowa
 
+... 0d. Plik wikilinks:
+
+u32: magiczna liczba ('LINK')
+dla każdego artykułu:
+	u16: liczba linków wychodzących
+	dla każdego linku:
+		u32: numer artykułu
+
 --------------------------------------------------------------------------------
 1. TYTUŁY ARTYKUŁÓW
 

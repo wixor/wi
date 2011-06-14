@@ -10,7 +10,8 @@ import re
 import array
 import marshal
 
-def wikilinks_graph():
+
+def wikilinks_graph(wikilinki):
 	colon = re.compile(r': ')
 	def unify_title(title):
 		title = title.strip().replace('_', ' ')
@@ -23,66 +24,60 @@ def wikilinks_graph():
 	
 	title_to_number = {}
 	print "Articles with double entries:"
-	for i, title in articles_titles:
+	for i, title in enumerate(articles_titles):
 		lower_title = title.lower()
 		if lower_title in title_to_number:
-			print title
+			print title.encode('utf8')
 		else:
 			title_to_number[lower_title] = i
 	
 	titles_count = len(articles_titles)
-	outgoing_links = [None] * titles_count
+	outgoing_links = [array.array('I') for _ in xrange(titles_count)]
 
-	with open(wikilinks, 'rb', buffering=2**27) as f_WIKILINKS:
+	sys.stderr.write("Digitalizing wikilinks:\n")
+	with open(wikilinki, 'rb', buffering=2**27) as f_WIKILINKS:
 		first_title = unify_title(f_WIKILINKS.readline().decode('utf8')).lower()
 		if first_title in title_to_number:
-			current_title_nb = title_to_number[first_title]
+			current_title_no = title_to_number[first_title]
 
 		for line in f_WIKILINKS:
 			title = unify_title(line.decode('utf8')).lower()
-			if line[0] != ' ': # it's line with title
+			if line[0] != ' ': # line with title
 				if title in title_to_number:
-					current_title_nb = title_to_number[title]
+					current_title_no = title_to_number[title]
 				else:
-					current_title_nb = titles_count
-					title_to_number[title]
-
-
-	### reading all articles titles from 'wikilinki.txt' ###
-	if os.path.exists('db/wikilinki.marshal'):
-		with open('db/wikilinki.marshal', 'rb') as f:
-			sys.stderr.write("Loading previously parsed 'wikilinki.txt'...\n")
-			articles_from_links = marshal.load(f)
-			sys.stderr.write("...finished.\n")
-	else:
-		sys.stderr.write("Loading articles' titles from 'wikilinki.txt'...\n")
-		articles_from_links = set()
-		with open(wikilinks, 'rb', buffering=2**27) as f_WIKILINKS:
-			for title in f_WIKILINKS:
-				title = title.decode('utf8')
-				title = title.strip()
-				title = title.lower()
-				title = title.replace('_', ' ')
-				title = re.sub(colon, ':', title)
-				articles_from_links.add(title)
-				with open('db/wikilinki.marshal', 'wb') as f:
-					marshal.dump(articles_from_links, f)
-					sys.stderr.write("...finished.\n")
-
-
-		print "articles that weren't in 'wikilinki.txt':"
-		new_set = set()
-		for title in articles_titles:
-			lower_title = title.lower()
-			if lower_title in articles_from_links:
-				articles_from_links.remove(lower_title)
-			elif title in new_set: # repeated article title
-				sys.stderr.write('repeated\t' + title.encode('utf8') + '\n')
+					current_title_no = titles_count
+					title_to_number[title] = titles_count
+					titles_count += 1
+					outgoing_links.append(array.array('I'))
 			else:
-				print title.encode('utf8')
-			new_set.add(title)
+				if title in title_to_number:
+					link_no = title_to_number[title]
+				else:
+					link_no = titles_count
+					title_to_number[title] = titles_count
+					titles_count += 1
+					outgoing_links.append(array.array('I'))
 
-		for _ in articles_from_links:
-			f_TOKENS.write(dummy_word + '\n')
+				outgoing_links[current_title_no].append(link_no)
 
+	with open('db/wikilinks', 'wb', buffering=2**27) as f:
+		f.write('LINK')
+		f.write(pack('<I', titles_count))
+		for articles_links in outgoing_links:
+			f.write(pack('<H', len(articles_links)))
+			for link in articles_links:
+				f.write(pack('<I', link))
+
+
+def main():
+	if len(sys.argv) != 2:
+		print 'usage: ./wikilinks_graph.py wikilinki.txt > articles_repeated_in_wikipedia'
+		exit(1)
+
+	wikilinks_graph(sys.argv[1])
+
+
+if __name__ == "__main__":
+	main()
 
