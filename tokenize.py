@@ -10,46 +10,29 @@ import re
 import array
 import marshal
 
+
 dummy_word = '"'
 marker = '"m'
 
-def tokenize(wikipedia, interesting_arts, wikilinks):
+
+def tokenize(wikipedia, interesting_arts):
 	"""Tokenizing given text,\nTitles starts with tag: "##TITLE## "."""
+	colon = re.compile(r': ')
+	def unify_title(title):
+		title = title.strip().replace('_', ' ')
+		title = re.sub(colon, ':', title)
+		return title
 
 	sys.stderr.write("Loading list of interesting articles.\n")
 	### reading titles of interesting articles, which are ought to be ranked ###
 	ranked_articles = set()
-	colon = re.compile(r': ')
 	with open(interesting_arts, 'rb') as f_INTERESTING:
 		for title in f_INTERESTING:
-			title = title.decode('utf8')
-			title = title.strip()
-			title = title.replace('_', ' ')
-			title = re.sub(colon, ':', title)
-			ranked_articles.add(title)
+			title = unify_title(title.decode('utf8'))
+			ranked_articles.add(title.lower())
 
-	### reading all articles titles from 'wikilinki.txt' ###
-	if os.path.exists('db/wikilinki.marshal'):
-		with open('db/wikilinki.marshal', 'rb') as f:
-			sys.stderr.write("Loading previously parsed 'wikilinki.txt'...\n")
-			articles_from_links = marshal.load(f)
-			sys.stderr.write("...finished.\n")
-	else:
-		sys.stderr.write("Loading articles' titles from 'wikilinki.txt'...\n")
-		articles_from_links = set()
-		with open(wikilinks, 'rb', buffering=2**27) as f_WIKILINKS:
-			for title in f_WIKILINKS:
-				title = title.decode('utf8')
-				title = title.strip()
-				title = title.lower()
-				title = title.replace('_', ' ')
-				title = re.sub(colon, ':', title)
-				articles_from_links.add(title)
-		with open('db/wikilinki.marshal', 'wb') as f:
-			marshal.dump(articles_from_links, f)
-		sys.stderr.write("...finished.\n")
 
-	title_colon = re.compile(r"^##TITLE## (.*)$")
+	title_pattern = re.compile(r"^##TITLE## (.*)$")
 	word = ur"""a-zß-öø-ÿĀ-ſ"""
 	not_word = ur"""[^{0}]""".format(word) # ąęśćżźńółèüäéáúūōíñõ
 	unwanted_char = re.compile(ur"[^-{word}0-9.']".format(word=word), re.U)
@@ -57,8 +40,8 @@ def tokenize(wikipedia, interesting_arts, wikilinks):
 	unwanted_symbol = re.compile(ur"(?:{symbol})|(?:(?<={not_word})[-.'])|(?:[-.'](?={not_word}))|(?:^[-.'])|(?:[-.']$)".format(symbol=symbol, not_word=not_word), re.U)
 	parenthesis = re.compile(ur"[()]", re.U)
 
-	tytuly_count = 0
-	terms_per_article = 1 # title separator counts as word too
+	titles_count = 0
+	terms_per_article = 0
 	articles_titles = []
 	articles_terms_count = array.array('H')
 	### reading and parsing file ###
@@ -66,28 +49,30 @@ def tokenize(wikipedia, interesting_arts, wikilinks):
 	with open(wikipedia, 'rb', buffering=2**27) as f_SRC:
 	 with open('db/tokenized', 'wb', buffering=2**25) as f_TOKENS:
 		for i, line in enumerate(f_SRC):
-			if i % 10000 == 0:
+			# percentage progress
+			if i % 1000 == 0:
 				sys.stderr.write("%.2f" % (100.0 * i / 15255080) + "%   \r")
+			# /percentage progress
+
 			line = line.decode('utf8')
-			title = title_colon.match(line)
-			if title:
-				if tytuly_count != 0:
+			title_match = title_pattern.match(line)
+			if title_match:
+				if titles_count != 0:
 					f_TOKENS.write('\n')
 					articles_terms_count.append(terms_per_article)
-				tytuly_count += 1
-				tytul = title.group(1).strip()
-				tytul = re.sub(colon, ':', tytul)
-				articles_titles.append(tytul)
-				dummy_or_marked = None
-				if tytul in ranked_articles:
+				titles_count += 1
+				title = unify_title(title_match.group(1))
+				articles_titles.append(title)
+				dummy_or_marked = None # title separator, also works as interesting articles marker
+				lower_title = title.lower()
+				if lower_title in ranked_articles:
 					dummy_or_marked = marker
-					ranked_articles.remove(tytul)
+					ranked_articles.remove(lower_title)
 				else:
 					dummy_or_marked = dummy_word
-				tytul = tytul.lower()
-				tytul = re.sub(parenthesis, ur"", tytul)
-				terms_per_article = len(tytul.split()) + 1
-				f_TOKENS.write(' '.join((tytul.encode('utf8'), dummy_or_marked)))
+				title_wo_parent = re.sub(parenthesis, ur"", lower_title)
+				terms_per_article = len(title.split()) + 1 # +1 for title separator
+				f_TOKENS.write(' '.join((title_wo_parent.encode('utf8'), dummy_or_marked)))
 			else:
 				line = line.lower()
 				line = re.sub(unwanted_symbol, ur" ", line)
@@ -102,48 +87,32 @@ def tokenize(wikipedia, interesting_arts, wikilinks):
 		articles_terms_count.append(terms_per_article)
 
 		if ranked_articles:
-			sys.stderr.write("\nranked articles that left unset:\n" + '\n'.join(ranked_articles).encode('utf8') + '\n')
-
-		print "articles that weren't in 'wikilinki.txt':"
-		new_set = set()
-		for title in articles_titles:
-			lower_title = title.lower()
-			if lower_title in articles_from_links:
-				articles_from_links.remove(lower_title)
-			elif title in new_set: # repeated article title
-				sys.stderr.write('repeated\t' + title.encode('utf8') + '\n')
-			else:
-				print title.encode('utf8')
-			new_set.add(title)
-
-		for _ in articles_from_links:
-			f_TOKENS.write(dummy_word + '\n')
-
-
+			print "Interesting articles that weren't in wikipedia:"
+			print '\n'.join(ranked_articles).encode('utf8')
+			print
+	
+	sys.stderr.write("Writing to 'db/artitles'.\n")
 	with open('db/artitles', 'wb', buffering=2**25) as f_TITL:
-		tytuly_count_total = tytuly_count + len(articles_from_links)
 		f_TITL.write('TITL')
-		f_TITL.write(pack('<I', tytuly_count_total))
-		f_TITL.write(bytearray(tytuly_count_total * 4 * 2))
+		f_TITL.write(pack('<I', titles_count))
+		f_TITL.write(bytearray(titles_count * 4))
 
 		for terms_count in articles_terms_count:
 			f_TITL.write(pack('<H', terms_count))
-		for _ in articles_from_links:
-			f_TITL.write(pack('<H', 1))
 
-		for tytul in articles_titles:
-			f_TITL.write(tytul.encode('utf8') + "\x00")
-		for tytul in articles_from_links:
-			f_TITL.write(tytul.encode('utf8') + "\x00")
-
+		for title in articles_titles:
+			f_TITL.write(title.encode('utf8') + "\x00")
+	
+	with open('db/articles.marshal', 'wb') as f_ARTICLES:
+		marshal.dump(articles_titles, f_ARTICLES)
 
 
 def main():
-	if len(sys.argv) < 2:
-		print 'usage: ./tokenize.py wiki_src interesting_arts wikilinks'
+	if len(sys.argv) != 3:
+		print 'usage: ./tokenize.py wiki_src interesting_arts > interesting_not_in_wikipedia.txt'
 		exit(1)
 
-	tokenize(sys.argv[1], sys.argv[2], sys.argv[3])
+	tokenize(sys.argv[1], sys.argv[2])
 
 
 if __name__ == "__main__":
