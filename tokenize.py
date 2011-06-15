@@ -46,8 +46,8 @@ def tokenize(wikipedia, interesting_arts):
 	articles_terms_count = array.array('H')
 	### reading and parsing file ###
 	sys.stderr.write("Tokenizing articles.\n")
-	with open(wikipedia, 'rb', buffering=2**27) as f_SRC:
-	 with open('db/tokenized', 'wb', buffering=2**25) as f_TOKENS:
+	with open(wikipedia, 'rb', buffering=2**24) as f_SRC:
+	 with open('db/tokenized', 'wb', buffering=2**24) as f_TOKENS:
 		for i, line in enumerate(f_SRC):
 			# percentage progress
 			if i % 1000 == 0:
@@ -92,16 +92,16 @@ def tokenize(wikipedia, interesting_arts):
 			print
 	
 	sys.stderr.write("Writing to 'db/artitles'.\n")
-	with open('db/artitles', 'wb', buffering=2**25) as f_TITL:
+	with open('db/artitles', 'wb', buffering=2**23) as f_TITL:
 		f_TITL.write('TITL')
 		f_TITL.write(pack('<I', titles_count))
-		zeros = bytearray(titles_count * 4)
-		f_TITL.write(zeros) # place for tf-idf
-		f_TITL.write(zeros) # page rank
+
+		# place holders for tf-idf and pagerank
+		f_TITL.seek(titles_count * 8, os.SEEK_CUR)
 
 		for terms_count in articles_terms_count:
 			f_TITL.write(pack('<H', terms_count))
-
+		
 		for title in articles_titles:
 			f_TITL.write(title.encode('utf8') + "\x00")
 	

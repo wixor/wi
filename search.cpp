@@ -17,7 +17,9 @@ extern "C" {
 static char queryText[1024];
 static bool verbose, noResults, onlyMarkedDocs;
 static int onlyBestDocs;
-static float pageRankFactor = 0.6, tfidfFactor = 0.4;
+static struct {
+    float alpha, beta, gamma;
+} freetextWeights = { 1.f, 0.f, 0.f };
 
 #define info(fmt, ...) \
     do { if(unlikely(verbose)) printf(fmt, ## __VA_ARGS__); } while (0)
@@ -1398,9 +1400,16 @@ class FreeTextQueryEngine : public QueryEngineBase
     struct Doc {
         int docId;
         float weight;
+        inline float score() const {
+            float pagerank = artitles.getPageRank(docId);
+            return freetextWeights.alpha * weight +
+                   freetextWeights.beta * pagerank +
+                   freetextWeights.gamma * weight * pagerank;
+        }
         inline bool operator<(const struct Doc &d) const {
-            return likely(weight != d.weight)
-                    ? weight > d.weight
+            float a = score(), b = d.score();
+            return likely(a != b)
+                    ? a > b
                     : docId < docId;
         }
     };
@@ -1422,7 +1431,6 @@ class FreeTextQueryEngine : public QueryEngineBase
     inline struct Doc *decodePostings(Reader rd, int count, struct TermWeights w);
     void trimPostings(struct Doc *postings, int *ppostingCount);
     void processTerm(struct Doc *postings, int postingCount);
-    inline void includePageRank();
     inline void sortResult();
     inline void printResult();
     
@@ -1615,14 +1623,6 @@ void FreeTextQueryEngine::processTerm(struct Doc *postings, int postingCount)
     docCount = (C - docs) + (Aend - A) + (Bend - B);
 }
 
-void FreeTextQueryEngine::includePageRank()
-{
-    for(int i=0; i<docCount; i++)
-        docs[i].weight =
-            tfidfFactor*docs[i].weight +
-            pageRankFactor*artitles.getPageRank(docs[i].docId);
-}
-
 void FreeTextQueryEngine::sortResult()
 {
     std::sort(docs, docs+docCount);
@@ -1634,9 +1634,9 @@ void FreeTextQueryEngine::printResult()
     printf("QUERY: %s TOTAL: %d\n", queryText, docCount);
     if(!noResults)
         for(int i=0; i<n; i++) 
-            printf("%d: %s (%.2lf%%)\n", 
+            printf("%d: %s (%.2f%%, pagerank: %.3f, score: %e)\n", 
                     i+1, artitles.getTitle(docs[i].docId),
-                    100.f*docs[i].weight);
+                    100.f*docs[i].weight, artitles.getPageRank(docs[i].docId), docs[i].score());
 }
 
 void FreeTextQueryEngine::do_run(QueryNode *root)
@@ -1663,7 +1663,6 @@ void FreeTextQueryEngine::do_run(QueryNode *root)
     createRqs();
     posrc.request(rqs, rqCount);
     processPostings();
-    includePageRank();
     sortResult();
     printResult();
 }
@@ -1675,12 +1674,12 @@ static void print_usage(const char *progname, const char *reason) __attribute__(
 static void print_usage(const char *progname, const char *reason) {
     if(reason)
         fprintf(stderr, "%s: %s\n", progname, reason);
-    fprintf(stderr, "usage: search [-v] [-r] [-m] [-b x] [-h] [-f x:y]\n"
+    fprintf(stderr, "usage: search [-v] [-r] [-m] [-b x] [-h] [-f x:y:z]\n"
                     "  -v: print verbose progress information\n"
                     "  -r: do not print title results\n"
                     "  -m: consider only marked documents\n"
                     "  -b: show only x best matches\n"
-                    "  -f: specify pagerank factor (x) and tfidf factor(y)\n"
+                    "  -f: specify free text weighting factors\n"
                     "  -h: print this help message\n");
     exit(1);
 }
@@ -1700,11 +1699,13 @@ int main(int argc, char *argv[])
                 break;
             }
             case 'f': {
-                char *end, *end2;
-                pageRankFactor = strtof(optarg, &end);
-                if(end == optarg || *end != ':') print_usage(argv[0], "unable to parse switch argument -- 'f'");
-                tfidfFactor = strtof(end+1, &end2);
-                if(end2 == end+1 || *end2 != '\0') print_usage(argv[0], "unable to parse switch argument -- 'f'");
+                char *end1, *end2, *end3;
+                freetextWeights.alpha = strtof(optarg, &end1);
+                if(end1 == optarg || *end1 != ':') print_usage(argv[0], "unable to parse switch argument -- 'f'");
+                freetextWeights.beta = strtof(end1+1, &end2);
+                if(end2 == end1+1 || *end2 != ':') print_usage(argv[0], "unable to parse switch argument -- 'f'");
+                freetextWeights.gamma = strtof(end2+1, &end3);
+                if(end3 == end2+1 || *end3 != '\0') print_usage(argv[0], "unable to parse switch argument -- 'f'");
                 break;
             }
             case 'h':

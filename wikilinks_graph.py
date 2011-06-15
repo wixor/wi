@@ -35,7 +35,7 @@ def wikilinks_graph(wikilinki):
 	outgoing_links = [array.array('I') for _ in xrange(titles_count)]
 
 	sys.stderr.write("Digitalizing wikilinks:\n")
-	with open(wikilinki, 'rb', buffering=2**27) as f_WIKILINKS:
+	with open(wikilinki, 'rb', buffering=2**24) as f_WIKILINKS:
 		first_title = unify_title(f_WIKILINKS.readline().decode('utf8')).lower()
 		if first_title in title_to_number:
 			current_title_no = title_to_number[first_title]
@@ -61,13 +61,12 @@ def wikilinks_graph(wikilinki):
 
 				outgoing_links[current_title_no].append(link_no)
 
-	with open('db/wikilinks', 'wb', buffering=2**27) as f:
+	with open('db/wikilinks', 'wb', buffering=2**24) as f:
 		f.write('LINK')
 		f.write(pack('<I', titles_count))
 		for articles_links in outgoing_links:
 			f.write(pack('<H', len(articles_links)))
-			for link in articles_links:
-				f.write(pack('<I', link))
+            f.write(article_links.tostring())
 
 
 def main():
