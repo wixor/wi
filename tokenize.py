@@ -95,7 +95,9 @@ def tokenize(wikipedia, interesting_arts):
 	with open('db/artitles', 'wb', buffering=2**25) as f_TITL:
 		f_TITL.write('TITL')
 		f_TITL.write(pack('<I', titles_count))
-		f_TITL.write(bytearray(titles_count * 4))
+		zeros = bytearray(titles_count * 4)
+		f_TITL.write(zeros) # place for tf-idf
+		f_TITL.write(zeros) # page rank
 
 		for terms_count in articles_terms_count:
 			f_TITL.write(pack('<H', terms_count))
