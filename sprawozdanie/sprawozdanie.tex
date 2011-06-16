@@ -373,54 +373,48 @@ modelu przestrzeni wektorowej.
 \textit{stopword} nanoszony jest specjalny znacznik, który jest rozpoznawany
 przez wyszukiwarkę.
 
-\section{Testowanie}
-
-\subsection{Środowisko uruchomieniowe}
-
-Poniższe testy zostały przeprowadzone na laptopie wyposażonym w:
+\section{Pomiary czasu działania}
+Pomiary czasu zostały przeprowadzone na laptopie wyposażonym w:
 \begin{itemize}
-	\item procesor: Core 2 Duo 2.0Ghz 4MB cache
-	\item pamięć: 2 GB DDR2 667MHz
-	\item dysk: 5400RPM 8MB cache
-	\item system operacyjny: Gentoo
-	\item platforma: x86\_64-pc-linux\dywiz gnu
-	\item pendrive ze średnim czasem odczytu ~28MB/s
+  \item procesor: Core 2 Duo 2.0 GHz, 4 MB cache
+  \item pamięć: 2 GB DDR2 667 MHz
+  \item dysk: 5400RPM, 8 MB cache
+  \item system operacyjny: Gentoo
+  \item platforma: \texttt{x86\_64-pc-linux-gnu}
 \end{itemize}
 Każdy wynik stanowi średnią arytmetyczną całkowitego czasu działania programu
 z~trzech pomiarów, zaokrągloną do sekund.
 \footnote{do pomiaru czasu użyty został program \texttt{GNU time}}
 
 Przed każdym uruchomieniem wyszukiwarki wykonywane było polecenie:
-\begin{quote}
-	echo 3 \textgreater{} /proc/sys/vm/drop\_caches
-\end{quote}
+\begin{verbatim}
+echo 3 > /proc/sys/vm/drop_caches
+\end{verbatim}
 w~celu wyczyszczenia systemowego buforu. Dzięki powyższemu wszystkie czasy zawarte
 w~raporcie uwzględniają całkowity rozruch wyszukiwarki. Dodatkowym plusem
 wyczyszczenia bufora podręcznego dla plików jest poprawa wiarygodności
 pomiarów, które w~przeciwnym wypadku byłyby zaburzona za sprawą plików
 zbuforowanych podczas poprzednich wyszukiwań.
 
-\subsection{Generowanie indeksów}
-
 \paragraph{Tokenizacja}
 Pierwszym krokiem na drodze do wygenerowania wszystkich, niezbędnych dla
 wyszukiwarki, indeksów jest tokenizacja pliku Wikipedii. Jej całkowity czas
-działania nieznacznie przekracza 12 minut, co wynika z~faktu, iż wymagane jest
+działania nieznacznie przekracza \textbf{??} minut, co wynika z~faktu, iż wymagane jest
 dekodowanie pliku do \textit{UTF-8} w~celu prawidłowego rozpoznawania
 wszystkich znaków. Czas tokenizacji Wikipedii na komputerze z~pracowni numer 7
-(Intel Core i3 CPU 3.07GHz, 4GB ramu, Ubuntu, i686-linux-gnu) wynosi około 7:30
-minuty.
+(Intel Core i3 CPU 3.07GHz, 4GB ramu, Ubuntu, i686-linux-gnu) wynosi około \textbf{??}
+minut.
 
 \paragraph{Generowanie indeksów}
-Ta część przetwarzania ztokenizowanej Wikipedii zajmuje niewiele ponad 19
-minut, z~czego najwięcej czasu zabiera proces \textbf{odwracania}, czyli
+Ta część przetwarzania ztokenizowanej Wikipedii zajmuje niewiele ponad \textbf{??}
+minut, z~czego najwięcej czasu zabiera proces odwracania, czyli
 sortowania tymczasowych list postingowych zdigitalizowanej Wikipedii. Czas
 generowania indeksów jest zdecydowanie mniejszy na komputerach z~pracowni numer
-7 -- około 3:30 minuty -- czego główną przyczyną jest spora ilość pamięci RAM,
+7 -- około \textbf{??} minut -- czego główną przyczyną jest spora ilość pamięci RAM,
 która umożliwia systemowi operacyjnemu efektywne buforowanie plików pośrednich.
 
-\subsection{Czas rozruchu}
-Czas potrzebny wyszukiwarce na rozruch, wynoszący około 7,5 sekundy, wynika
+\paragraph{Czas rozruchu}
+Czas potrzebny wyszukiwarce na rozruch, wynoszący około \textbf{??} sekundy, wynika
 głównie z~potrzebny wczytania plików zawierających listę wszystkich tytułów
 artykułów oraz listę wszystkich słów pozyskanych z~Wikipedii i~morfologika wraz
 z~długościami, a~także pozycjami w~plikach indeksów, ich list postingowych
@@ -428,97 +422,7 @@ i~lematyzacyjnych\footnote{pliki \texttt{db/artitles} -- 24MB,
 \texttt{db/dictionary} - 71MB}. Wyszukiwarka podczas działania zajmuje około
 300MB pamięci operacyjnej.
 
-\subsection{Czasy dla dostarczonych testów}
-W~procesie testowania wyszukiwarki sprawdziło się przypuszczenie, iż (przy
-założeniu trzymania indeksów na dysku) to właśnie czas potrzebny głowicy na
-przemieszczanie się nad odległymi sektorami stanie się wąskim gardłem
-całego programu\footnote{Chociaż indeksy łącznie zajmują niecałe 490MB
-i~w~całości mogłyby zmieścić się w~pamięci operacyjnej.}. Z~tego też powodu
-zostały przeprowadzone testy z~plikami indeksów umieszczonymi na pendrive-ie,
-aby sprawdzić stopień przyspieszenia wyszukiwania wynikający ze stałego czasu
-dostępu do sektora w~przypadku pamięci typu \textit{flash}.
-
-\begin{center}
-	\begin{table}
-		\begin{tabular}[c]{| l || r | r | r |}
-		\hline
-		pytania: & and & or & frazowe \\ \hline \hline
-		ilość pytań & 5500 & 5133 & 2741 \\ \hline
-		łączna liczba odpowiedzi & 34790744 & 5306339 & 5037 \\ \hline
-		wielkość pliku odpowiedzi & 694MB & 103MB & 221KB \\
-		\hline
-		\end{tabular}
-		\caption{Wielkość wyników dla dostarczonych zapytań.}
-	\end{table}
-\end{center}
-
-\begin{center}
-	\begin{table}
-		\begin{tabular}[c]{| l || c | c | c |}
-		\hline
-		pytania: & and & or & frazowe \\ \hline \hline
-		czasy dla: & \multicolumn{3}{|l|}{} \\ \hline
-		dysk, zapis & 0:52 & 1:06 & 1:04 \\ \hline
-		pendrive, zapis & 0:33 & 0:16 & 0:12 \\ \hline
-		dysk, bez zapisu & 0:21 & 0:55 & 1:04 \\ \hline
-		pendrive, bez zapisu & 0:18 & 0:15 & 0:12 \\
-		\hline
-		\end{tabular}
-		\caption{Czasy działania wyszukiwarki dla dostarczonych zapytań
-		wyrażane w~sekundach.  Wiersze ,,bez zapisy'' oznaczają, iż
-		wyszukiwarka została uruchomiona w~trybie \texttt{search -r}
-		i~wyświetlała tylko podsumowanie liczby znalezionych artykułów dla
-		każdego zapytania. Wiersz ,,dysk, zapis'' oznacza, iż pełne dane
-		zostały przekierowane do pliku.}
-	\end{table}
-\end{center}
-
-\subsection{Wnioski dotyczące czasów}
-Z~pomiaru czasów wyszukiwania przeprowadzonych z~przekierowaniem wyników do
-pliku, jak i~bez niego widać wyraźnie, iż sekwencyjny charakter pracy dysku
-w~połączeniu z~potrzebą przeplatania odczytów oraz zapisów w~znaczącym stopniu
-wydłuża całkowity czas działania programu. Jeśli natomiast przyjrzymy się
-czasom działania zmierzonym dla wyszukiwarki bez zapisywania wyników do pliku,
-możemy dostrzec przewagę stałego czasu dostępu pendrive-a nad dyskiem, która
-najwydatniej ukazuje się w~przypadku zapytań \textit{frazowych} oraz
-\textit{,,or''}. Po zminimalizowaniu czasu potrzebnego na pozyskanie
-(rozrzuconych po pliku) odpowiednio list pozycyjnych i~ postingowych, widoczna
-zaczyna być praca \texttt{optymalizatora} zapytań. 
-
-\subsection{Własne testy}
-W~katalogu \texttt{/tests} znajdują się trzy skrypty umożliwiające automatyczne
-testowanie. Pierwszym z~nich jest \texttt{tests/check\_unwanted\_chars.py}, którego
-zadaniem jest sprawdzenie poprawności procesu tokenizacji, w~szczególności
-odrzucania słów z~niepożądanymi znakami.\\
-Drugi skrypt \texttt{tests/generate\_tests.py} umożliwia automatyczne
-sprawdzanie wyników wyszukiwania dla losowo wybranych słów z~pliku\\
-\texttt{db/words\_frequency\_per\_article.py}.\\
-Ostatni skrypt \texttt{tests/words\_frequency.py} generuje, na bazie
-ztokenizowanej Wikipedii, dwa pliki:
-\begin{itemize}
-	\item \texttt{db/words\_frequency} - plik zawierający częstości wystąpień
-		słów w~całej Wikipedii
-	\item \texttt{db/words\_frequency\_per\_article} - plik zawierający ilość
-		dokumentów, w~których wystąpiło dane słowo
-\end{itemize}
-Znając liczbę wystąpień najczęstszych jak i~najrzadszych słów, możliwe było
-przetestowanie \textbf{optymalizatora zapytań} pod względem optymalizacji ich
-przetwarzania:
-\begin{verbatim}
-QUERY: w TOTAL: 512249
---- total time: 142.162 ms wall / 5.625 ms cpu
-
-QUERY: i TOTAL: 380522
---- total time: 42.983 ms wall / 3.603 ms cpu
-
-QUERY: na TOTAL: 338713
---- total time: 50.278 ms wall / 5.845 ms cpu
-
-QUERY: tzu-chung TOTAL: 1
---- total time: 0.221 ms wall / 0.224 ms cpu
-
-QUERY: tzu-chung w i na TOTAL: 1
---- total time: 57.140 ms wall / 12.975 ms cpu
-\end{verbatim}
+\section{Ocena mechanizmu rankingowania dokumentów}
+\textbf{??}
 
 \end{document}
