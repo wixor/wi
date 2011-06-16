@@ -305,7 +305,21 @@ Tokenizacja generuje zręb pliku \texttt{TITL}.
 
 \paragraph{Obliczanie pagerank} Na podstawie zparsowanej listy linków obliczane
 są wartości pagerank. Trafiają one do utworzonego w poprzednim kroku pliku
-\texttt{TITL}.
+\texttt{TITL}. Pagerank obliczany jest przez przyjęcie równych wartości
+prawdopodobieństw dla wszystkich dokumentów i iteracyjne obliczanie
+$M^{k+1} \vec v = M(M^k \vec v)$. Zbieżność tej metody jest zdecydowanie
+wolniejsza od metody $M^{2k} \vec v = (M^k)^2 \vec v$, jednak nie wymaga
+potęgowania macierzy, przez co zużywa zdecydowanie mniej pamięci (mnożenie przez
+$M$ daje się wykonać w czasie proporcjonalnym do ilości linków; zwykłe
+potęgowanie $M$ spowodowałoby powstawie macierzy gęstej, która nie mieści się
+w pamięci). W każdym kroku obliczana jest też wartość $\delta = \max_k |v'_k - v_k|/v_k$,
+algorytm uznaje otrzymany wektor za ostateczny gdy $\delta < 10^{-4}$. Kontrolnie
+obliczana jest też wartość $\sigma = \sum_k v_k$. W każdym kroku powinno być
+$\sigma = 1$, jednak ze względu na błędy numeryczne wartość ta może odchylić
+się od poprawnej. W praktyce odchylenie to przyjmuje wartość rzędu $10^{-5}$
+po ponad 65 krokach algorytmu. Dla wydajności zastosowano arytmetykę
+\texttt{float}, w której względny błąd reprezentacji wynosi około $10^{-7}$.
+Prawdopodobieństwo teleportacji przyjęto na $10\%$.
 
 \paragraph{Tworzenie korpusu} Na podstawie ztokenizowanej Wikipedii oraz
 morfologika tworzony jest korpus. Jest to plik o formacie podobnym do
