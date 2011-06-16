@@ -3,16 +3,15 @@
 \usepackage[polish]{babel}
 \usepackage{polski}
 \usepackage{amsmath}
-%\usepackage{a4wide}
+\usepackage{a4wide}
 \usepackage{url}
-\usepackage{caption}
 \pagestyle{plain}
 
 \makeatletter
   \renewcommand{\@seccntformat}[1]{\csname the#1\endcsname.\quad}
 \makeatother
 
-\title{\textbf{Wyszukiwanie informacji} \\ pracownia, zadanie nr 1}
+\title{\textbf{Wyszukiwanie informacji} \\ pracownia}
 \author{
 Wiktor Janas \thanks{\texttt{wixorpeek@gmail.com}}
 \and
@@ -33,32 +32,43 @@ polskiej Wikipedii. Projekt obejmuje stworzenie indeksera, czyli programu
 przetwarzającego tekst Wikipedii do postaci ułatwiającej wyszukiwanie, oraz
 samej wyszukiwarki, czyli programu odpowiadającego na zapytania.
 
-Wyszukiwarka obsługuje zapytania boolowskie oraz frazowe, jak również umożliwia
-wyszukiwanie z lematyzacją. W realizacji projektu wykorzystano udostępniony
-tekst Wikipedii\footnote{\url{http://www.ii.uni.wroc.pl/~prych/IR/wikipedia_dla_wyszukiwarek.txt.gz}},
-morfologik\footnote{\url{http://www.ii.uni.wroc.pl/~prych/text\_mining/bazy_do_tm.txt}}
-oraz listę \textit{stopwords}\footnote{\url{http://www.ii.uni.wroc.pl/~prych/text_mining/stop_words.txt}}.
+Wyszukiwarka obsługuje zapytania boolowskie, frazowe oraz tekstowe z rankingowaniem
+artykułów (metodą tf-idf + pagerank). Dla zapytań boolowskich oraz tekstowych
+stosowana jest lematyzacja. W realizacji projektu wykorzystano udostępniony
+tekst Wikipedii\footnote{\url{http://www.ii.uni.wroc.pl/~prych/IR/Wikipedia_dla_wyszukiwarek.txt.gz}},
+morfologik\footnote{\url{http://www.ii.uni.wroc.pl/~prych/text_mining/bazy_do_tm.txt}},
+listę \textit{stopwords}\footnote{\url{http://www.ii.uni.wroc.pl/~prych/text_mining/stop_words.txt}},
+listę linków między artykułami\footnote{\url{http://www.ii.uni.wroc.pl/~prych/IR/Wikilinki.txt.gz}}
+oraz listę ciekawych artykułów\footnote{\url{https://kno.ii.uni.wroc.pl/ii/file.php/140/interesujace_artykulu.txt}}.
 
 Projekt został zrealizowany przy użyciu języków C++ oraz Python. Wymagany jest
 system operacyjny Linux wraz z biblioteką \texttt{talloc} (zazwyczaj wystarczy
 zainstalować pakiet \texttt{libtalloc-dev}). Aby skompilować programy należy
 wydać polecenie \texttt{make} w katalogu z kodem źródłowym. Następnie można
 przystąpić do tworzenia indeksu: w tem celu należy wydać polecenie
-\texttt{./create-index.sh}, którego argumentami powinny być kolejno:
-ścieżka do tekstu \textit{Wikipedii}, ścieżka do \textit{morfologika} oraz ścieżka do pliku
-\textit{stopwords} (uwaga: pliki te powinny mieć zakończenia linii w formacie
-UNIX (LF - Line feed, '\\n'); z dostarczonych materiałów plik \textit{stopwords} wymaga konwersji,
-można jej dokonać używając programu \texttt{fromdos}). Wraz z projektem
-dostarczony jest utworzony indeks. Wreszcie można uruchomić wyszukiwarkę
-wydając polecenie \texttt{./search}. Wyszukiwarka domyślnie pracuje w trybie
-wsadowym: wczytuje zapytania ze standardowego wejścia i wypisuje wyniki na
-standardowe wyjście; można ją zatem przetestować używając polecenia
-\texttt{./search < queries.txt > answers.txt}. Wyszukiwarka posiada tryb
-interaktywny, aktywowany opcją \texttt{-v}. W trybie tym wyszukiwarka wypisuje
-zachętę do wprowadzenia zapytania oraz wiele informacji o przetwarzaniu.
-Ponieważ w trybie interaktywnym wynikowa lista tytułów artykułów często jest
-zbędna, wyszukiwarka posiada również opcję \texttt{-r}, która wyłącza
-wypisywanie listy wyników (informacja o ilości trafień wciąż jest wypisywana).
+\texttt{make the-index}. Skrypt oczekuje położenia danych wejściowych w katalogu
+\texttt{Wiki\_dane} zgodnie z zapisami w pliku Makefile; zapisy te należy
+dostosować do rzeczywistej lokalizacji danych wejściowych. Należy zwrócić uwagę
+na kodowanie nowych linii w plikach, wymagany jest format UNIX; spośród
+dostarczonych materiałów plik \textit{stopwords} wymaga konwersji, można jej
+dokonać używając programu \texttt{fromdos}). Wraz z projektem dostarczony jest
+utworzony indeks. Wreszcie można uruchomić wyszukiwarkę wydając polecenie
+\texttt{./search}. Wyszukiwarka domyślnie pracuje w trybie wsadowym: wczytuje
+zapytania ze standardowego wejścia i wypisuje wyniki na standardowe wyjście;
+można ją zatem przetestować używając polecenia \texttt{./search < queries.txt > answers.txt}.
+Wyszukiwarkę można wywołać z następującymi opcjami:\begin{itemize}
+  \item \texttt{-v}: tryb szczegółowy, wyszukiwarka wypisuje zachętę do
+  wprowadzenia zapytania oraz wiele informacji o przetwarzaniu;
+  \item \texttt{-r}: blokada wypisywania wyników, przydatna dla zapytań
+  boolowskich oraz frazowych gdy lista wyników jest długa;
+  \item \texttt{-m}: ograniczenie zbioru artykułów do ,,ciekawych artykułów''
+  (tylko dla zapytań tekstowych);
+  \item \texttt{-b $n$}: wypisywanie tylko $n$ najlepszch artykułów
+  (tylko dla zapytań tekstowych);
+  \item \texttt{-f $\alpha$:$\beta$:$\gamma$}: konfiguracja parametrów
+  rankingowania artykułów (tylko dla zapytań tekstowych);
+  \item \texttt{-h}: informacja o dostępnych opcjach.
+\end{itemize}
 
 \section{Ciekawe rozwiązania zastosowane w projekcie}
 Wśród wielu standardowych rozwiązań zastosowanych w projekcie (parser zapytań,
@@ -191,24 +201,113 @@ się wielokrotnie te same listy postingowe, na przykład w zapytaniu
 unikalnych list postingowych tak, aby każdą listę odczytać z dysku
 tylko raz.
 
+\subsection{Praca na całej Wikipedii}
+Zrealizowany projekt umożliwa prace na całym dostarczonym zbiorze Wikipedii,
+nie jest koniecznie (ani możliwe) wstępne odsiewanie artykułów. Dodanie obsługi
+zapytań tekstowych z rankingowaniem spowodowało jedynie niewielkie wydłużenie
+czasu tworzenia indeksu i nie niesie praktycznie żadnego nakładu czasowego przy
+realizacji zapytań boolowskich lub frazowych. Jednak w celu zapewnienia
+porównywalności wyników wyszukiwarka została zaopatrzona w funkcję przycinania
+wyników do zbioru ,,ciekawych artykułów''. Opcja ta jest aktywowana
+przełącznikiem z linii poleceń.
+
+\section{Zapytania tekstowe z rankingowaniem}
+Wyszukiwarka rozpoznaje zapytania w postaci $t1$ $t2$ $t3$ $\dots$ jako
+zapytania tekstowe (w poprzedniej wersji tej pracy zapytanie takiej postaci było
+traktowane jako zapytanie boolowskie ze spójnikami \texttt{AND}). W celu jego
+realizacji wyszukiwarka odnajduje listy lematyzowane wszystkich termów zawartych
+w zapytaniu oraz oblicza ich sumę (tak, jakby termy połączone były spójnikami
+\texttt{OR}). Jest to uzasadnione, gdyż nieobecność jednego z termów w artykule
+nie powinna dyskwalifikować go z obecności w wynikach wyszukiwania.
+
+Podczas obliczania sumy list postingowych każdy artykuł otrzymuje również
+pewną wagę w modelu przestrzeni wektorowej. Jeżeli potraktujemy artykuł (bądź
+zapytanie) jako zbiór par (term,pozycja) oraz oznaczymy zbiór wszystkich
+dokumentów przez $D$ oraz zapytanie przez $q$, możemy zdefiniować:
+\newcommand{\simi}[2]{\mathrm{sim}(#1,#2)}
+\newcommand{\idf}[1]{\mathrm{idf}_{#1}}
+\newcommand{\tf}[2]{\mathrm{tf}_{#1,#2}}
+\[ \idf{t} = \log \frac{ |D| }{ |\{d \in D \mid \exists p \;.\; \langle t,p \rangle \in d\}| } \]
+\[ \tf{t}{d} = \frac{ |\{ p \mid \langle t,p \rangle \in d\}| }{ |d| } \]
+\[ \vec v_d = \begin{bmatrix} \tf{t_0}{d} \cdot \idf{t_0},\;
+                \tf{t_1}{d} \cdot \idf{t_1},\;
+                \dots \end{bmatrix} \]
+\[ \simi{d}{q} =
+      \frac{ \vec v_d \cdot \vec v_q }{ \|\vec v_d\| \cdot \|\vec v_q\| } =
+      \sum_t \frac{ \tf{t}{d} \cdot \tf{t}{q} \cdot \idf{t}^2 }{ \|\vec v_q\| \cdot \|\vec v_d\| } \]
+Tak zdefiniowane $\simi{d}{q}$ uważamy za miarę podobieństwa dokumentu $d$
+do zapytania $q$ w modelu przestrzeni wektorowej. Zauważmy, że wartość ta mieści
+sie w przedziale $[0, 1]$. Co więcej, jeżeli $d \cap q = \emptyset$, to
+$\simi{d}{q} = 0$, gdyż $\forall t \;.\; \tf{t}{d} = 0 \vee \tf{t}{q} = 0$.
+Zatem podobieństwo dokumentów, które nie zawierają żadnego z termów z zapytania
+wynosi zero. Dla pozostałych dokumentów obliczanie powyższej sumy warto wykonywać
+jedynie po termach zawartych w zapytaniu, gdyż dla pozostałych $\tf{t}{q} = 0$.
+
+W celu implementacji powyższych rachunków dla każdego dokumentu przechowywana
+jest wartość $\|\vec v_d\|$ oraz wartość $|d|$. Ponadto dla każdej pary
+(term, dokument), czyli dla każdego wpisu na liście postingowej, przechowywana
+jest ilość wystąpień danego termu w dokumencie. Zauważmy, że ilość dokumentów,
+które zawierają dany term, to po prostu długość listy postingowej dla danej pary
+(term, dokument). Zatem uzupełniając indeks o jedynie trzy wartości (jedną
+zmiennopozycyjną i dwie całkowitoliczbowe) jesteśmy w stanie obliczać
+podobieństwo w modelu przestrzeni wektorowej.
+
+Na obliczoną wartość $\simi{d}{q}$ nakładana jest jeszcze wartość pagerank
+dokumentu $d$. Jako, że wartości pagerank reprezentują prawdopodobieństwo
+znalezienia się w danym artykule w wyniku losowego błądzenia, ich wartości 
+są niewielkie (od $10^{-3}$ do $10^{-9}$) i zależą od rozmiaru kolekcji
+dokumentów. Nie nadają się zatem do prostego złożenia z wartościami podobieństwa
+w modelu przestrzeni wektorowej. Dlatego wprowadzono wartość $p(d) = \log (|D| \cdot \mathrm{pagerank}(d))$.
+Mnożenie przez $|D|$ to dzielenie przez $1/|D|$, czyli średnią wartość pagerank,
+przeto wartość $p(d)$ wyraża odchylenie wartości pagerank od średniej.
+Ostatecznie jakość artykułu obliczana jest jako
+\[ \mathrm{score}(d,q) = \alpha \cdot \simi{d}{q} +
+                         \beta \cdot p(d) +
+                         \gamma \cdot \simi{d}{q} \cdot p(d) \]
+Wartości $\alpha, \beta, \gamma$ wyznaczono eksperymentalnie dla uzyskania
+jak najlepszych wyników na $\alpha = ??, \beta = ??, \gamma = ??$. Parametry
+te można zmienić uruchamiając wyszukiwarkę z opcją \texttt{-f}.
+
 \section{Budowanie indeksu}
 Proces budowania indeksu podzielony jest na kilka etapów; każdy z nich jest
 wykonywany przez osobny program, które przekazują sobie dane przy użyciu plików
-pośrednich.
+pośrednich. Pliki te mogą mieć znaczne rozmiary, nie wchodzą one jednak w skład
+ostatecznego indeksu. Zarówno pliki pośrednie jak i końcowe umieszczane są w
+katalogu \texttt{db/}. Właściwy indeks składa się z następujących czterech plików:
+\begin{itemize}
+\item \texttt{artitles} (magiczna liczba \texttt{TITL}): plik ten stanowi listę
+wszystkie informacji dotyczących artykułów: ich tytuły, ilości termów, wagi w
+modelu przestrzeni wektorowej oraz wartości pagerank; 
+\item \texttt{dictionary} (magiczna liczba \texttt{DICT}): plik ten jest tablicą
+hashującą umożliwiającą dostęp do wszystkich informacji o termach: ich postaci
+tekstowych, lokalizacjach list pozycyjnych oraz lematyzowanych oraz wartościach
+idf.
+\item \texttt{lemmatized} (magiczna liczba \texttt{IDXL}): plik ten zawiera
+lematyzowane listy postingowe wszystkich termów; listy te wzbogacone są o
+współczynniki umożliwiające obliczanie podobieństwa w modelu przestrzeni wektorowej.
+\item \texttt{positional} (magiczna liczba \texttt{IDXP}): plik ten zawiera
+pozycyjne listy postingowe wszystkich termów.
+\end{itemize}
 
 \paragraph{Tokenizacja Wikipedii} Dostarczone dane wejściowe są zamieniane
 na format, w którym każdy artykuł jest zapisany w jednej linii składającej się
 z kolejnych słów występujących w artykule oddzielonych spacjami. Na tym etapie
 usuwane są wszystkie zbędne znaki, dokonywana jest zamiana liter na małe
-oraz formowane są termy.
-\footnote{Tokeny, które zawierają znaki różne od liter alfabetu łacińskiego,
-rozszerzonego o~ich wszystkie odpowiedniki ze znakami diakrytycznymi, uznawane
-są za niepoprawne termy i~zastępowane cudzysłowem (``) w~celu uwzględnieniach
-ich pozycji w~tekście.}
-Na tym etapie powstaje również lista tytułów
-artykułów (plik \texttt{TITL}).
+oraz formowane są termy. Tokeny, które zawierają znaki różne od liter alfabetu
+łacińskiego, rozszerzonego o~ich wszystkie odpowiedniki ze znakami diakrytycznymi,
+uznawane są za niepoprawne termy i~zastępowane cudzysłowem ('') w~celu
+uwzględnieniach ich pozycji w~tekście. Artykuły ,,ciekawe'' są dodatkowo
+oznaczane przez wprowadzenie do nich termu ''m (cudzysłów-m). Dzięki liście
+postingowej tego specjalnego termu wyszukiwarka potrafi szybko wyeliminować
+nieciekawe artykuły z wyników wyszukiwania. Na tym etapie parsowana jest także
+lista linków między artykułami, posłuży ona do obliczenia wartości pagerank. 
+Tokenizacja generuje zręb pliku \texttt{TITL}.
 
-\paragraph{Tworzenie korpusu} Na podstawie ztokenizowanej wikipedii oraz
+\paragraph{Obliczanie pagerank} Na podstawie zparsowanej listy linków obliczane
+są wartości pagerank. Trafiają one do utworzonego w poprzednim kroku pliku
+\texttt{TITL}.
+
+\paragraph{Tworzenie korpusu} Na podstawie ztokenizowanej Wikipedii oraz
 morfologika tworzony jest korpus. Jest to plik o formacie podobnym do
 słownika. Stanowi on tabelę hashującą zawierającą termy Wikipedii oraz
 morfologika. Dzięki temu plikowi w dalszej części procesu możliwa będzie
@@ -251,13 +350,13 @@ odwróconych powstałych w poprzednim kroku powstaje słownik (plik
 \texttt{DICT}), indeks pozycyjny (plik \texttt{IDXP}) oraz indeks zlematyzowany
 (plik \texttt{IDXL}). Na tym etapie usuwane są słowa, które nie mają żadnych
 postingów (mogły one znaleźć się w korpusie, gdyż występowały w morfologiku,
-jednak żaden term Wikipedii nie ,,aktywował'' ich).
+jednak żaden term Wikipedii nie ,,aktywował'' ich). Ponadto obliczane są
+wartości idf termów oraz inne współczynniki niezbędne dla realizacji zapytań w
+modelu przestrzeni wektorowej.
 
 \paragraph{Oznaczanie stopwords} W gotowych plikach indeksu na każde
 \textit{stopword} nanoszony jest specjalny znacznik, który jest rozpoznawany
 przez wyszukiwarkę.
-
-\newpage
 
 \section{Testowanie}
 
@@ -278,7 +377,7 @@ z~trzech pomiarów, zaokrągloną do sekund.
 
 Przed każdym uruchomieniem wyszukiwarki wykonywane było polecenie:
 \begin{quote}
-	echo 3 $>$ /proc/sys/vm/drop\_caches
+	echo 3 \textgreater{} /proc/sys/vm/drop\_caches
 \end{quote}
 w~celu wyczyszczenia systemowego buforu. Dzięki powyższemu wszystkie czasy zawarte
 w~raporcie uwzględniają całkowity rozruch wyszukiwarki. Dodatkowym plusem
@@ -290,40 +389,31 @@ zbuforowanych podczas poprzednich wyszukiwań.
 
 \paragraph{Tokenizacja}
 Pierwszym krokiem na drodze do wygenerowania wszystkich, niezbędnych dla
-wyszukiwarki, indeksów jest tokenizacja pliku wikipedii. Jej całkowity czas
+wyszukiwarki, indeksów jest tokenizacja pliku Wikipedii. Jej całkowity czas
 działania nieznacznie przekracza 12 minut, co wynika z~faktu, iż wymagane jest
 dekodowanie pliku do \textit{UTF-8} w~celu prawidłowego rozpoznawania
-wszystkich znaków.
-\marginpar{\textbf{tokenizacja: około 12 minut}}
-\footnote{Czas tokenizacji wikipedii na komputerze z~pracowni numer 7 (Intel
-Core i3 CPU 3.07GHz, 4GB ramu, Ubuntu, i686-linux-gnu) wynosi około 7:30
-minuty}
+wszystkich znaków. Czas tokenizacji Wikipedii na komputerze z~pracowni numer 7
+(Intel Core i3 CPU 3.07GHz, 4GB ramu, Ubuntu, i686-linux-gnu) wynosi około 7:30
+minuty.
 
 \paragraph{Generowanie indeksów}
-Ta część przetwarzania ztokenizowanej wikipedii zajmuje niewiele ponad 19
+Ta część przetwarzania ztokenizowanej Wikipedii zajmuje niewiele ponad 19
 minut, z~czego najwięcej czasu zabiera proces \textbf{odwracania}, czyli
-sortowania tymczasowych list zdigitalizowanej wikipedii rozszerzonej
-o~lematyzację.
-\marginpar{\textbf{indeksy: około 19 minut}}
-\footnote{Czas generowania indeksów przebiega zdecydowanie szybciej na
-komputerach z~pracowni numer 7 - około 3:30 minuty - czego główną przyczyną
-jest spora ilość pamięci ram, która umożliwia systemowi operacyjnemu efektywne
-buforowanie plików pośrednich.}
+sortowania tymczasowych list postingowych zdigitalizowanej Wikipedii. Czas
+generowania indeksów jest zdecydowanie mniejszy na komputerach z~pracowni numer
+7 -- około 3:30 minuty -- czego główną przyczyną jest spora ilość pamięci RAM,
+która umożliwia systemowi operacyjnemu efektywne buforowanie plików pośrednich.
 
 \subsection{Czas rozruchu}
-
 Czas potrzebny wyszukiwarce na rozruch, wynoszący około 7,5 sekundy, wynika
-głównie z~ potrzebny wczytania plików zawierających listę wszystkich tytułów
-artykułów oraz listę wszystkich słów pozyskanych z~wikipedii i~morfologika wraz
+głównie z~potrzebny wczytania plików zawierających listę wszystkich tytułów
+artykułów oraz listę wszystkich słów pozyskanych z~Wikipedii i~morfologika wraz
 z~długościami, a~także pozycjami w~plikach indeksów, ich list postingowych
-i~lematyzacyjnych\footnote{pliki \texttt{db/artitles} - 15,4MB,
-\texttt{db/dictionary} - 70,5MB}.
-Wyszukiwarka podczas swojego działania zajmuje około 250MB pamięci
-operacyjnej.
-\marginpar{\textbf{rozruch: około 7,5~sek}}
+i~lematyzacyjnych\footnote{pliki \texttt{db/artitles} -- 24MB,
+\texttt{db/dictionary} - 71MB}. Wyszukiwarka podczas działania zajmuje około
+300MB pamięci operacyjnej.
 
 \subsection{Czasy dla dostarczonych testów}
-
 W~procesie testowania wyszukiwarki sprawdziło się przypuszczenie, iż (przy
 założeniu trzymania indeksów na dysku) to właśnie czas potrzebny głowicy na
 przemieszczanie się nad odległymi sektorami stanie się wąskim gardłem
@@ -360,10 +450,10 @@ dostępu do sektora w~przypadku pamięci typu \textit{flash}.
 		\hline
 		\end{tabular}
 		\caption{Czasy działania wyszukiwarki dla dostarczonych zapytań
-		wyrażane w~sekundach.  Wiersze ``bez zapisy'' oznaczają, iż
+		wyrażane w~sekundach.  Wiersze ,,bez zapisy'' oznaczają, iż
 		wyszukiwarka została uruchomiona w~trybie \texttt{search -r}
 		i~wyświetlała tylko podsumowanie liczby znalezionych artykułów dla
-		każdego zapytania. Wiersz ``dysk, zapis'' oznacza, iż pełne dane
+		każdego zapytania. Wiersz ,,dysk, zapis'' oznacza, iż pełne dane
 		zostały przekierowane do pliku.}
 	\end{table}
 \end{center}
@@ -376,7 +466,7 @@ wydłuża całkowity czas działania programu. Jeśli natomiast przyjrzymy się
 czasom działania zmierzonym dla wyszukiwarki bez zapisywania wyników do pliku,
 możemy dostrzec przewagę stałego czasu dostępu pendrive-a nad dyskiem, która
 najwydatniej ukazuje się w~przypadku zapytań \textit{frazowych} oraz
-\textit{``or''}. Po zminimalizowaniu czasu potrzebnego na pozyskanie
+\textit{,,or''}. Po zminimalizowaniu czasu potrzebnego na pozyskanie
 (rozrzuconych po pliku) odpowiednio list pozycyjnych i~ postingowych, widoczna
 zaczyna być praca \texttt{optymalizatora} zapytań. 
 
@@ -389,10 +479,10 @@ Drugi skrypt \texttt{tests/generate\_tests.py} umożliwia automatyczne
 sprawdzanie wyników wyszukiwania dla losowo wybranych słów z~pliku\\
 \texttt{db/words\_frequency\_per\_article.py}.\\
 Ostatni skrypt \texttt{tests/words\_frequency.py} generuje, na bazie
-ztokenizowanej wikipedii, dwa pliki:
+ztokenizowanej Wikipedii, dwa pliki:
 \begin{itemize}
 	\item \texttt{db/words\_frequency} - plik zawierający częstości wystąpień
-		słów w~całej wikipedii
+		słów w~całej Wikipedii
 	\item \texttt{db/words\_frequency\_per\_article} - plik zawierający ilość
 		dokumentów, w~których wystąpiło dane słowo
 \end{itemize}
@@ -416,67 +506,4 @@ QUERY: tzu-chung w i na TOTAL: 1
 --- total time: 57.140 ms wall / 12.975 ms cpu
 \end{verbatim}
 
-\newpage
-
-\section{Instrukcja uruchomienia}
-
-W~celu skompilowania wszystkich potrzebnych programów, należy w~katalogu
-z~plikami źródłowymi wydać polecenie:
-\begin{itemize}
-	\item \texttt{make}
-\end{itemize}
-
-Następnie należy wykonać poniższy skrypt, który wygeneruje wszystkie potrzebne
-indeksy (może zająć ponad 30 minut):
-\begin{itemize}
-	\item \texttt{./create-index.sh \textit{wikipedia morfologik stopwords}}
-\end{itemize}
-
-Aby przystąpić do wyszukiwania w trybie interaktywnym należy wykonać następujące
-polecenie:
-\begin{itemize}
-	\item \texttt{./search -v [-r]}
-\end{itemize}
-Wyświetlony zostanie znak zachęty, a każde zapytanie zostanie wzbogacone
-o~informacje na temat jego przetwarzania. Opcjonalny parametr \texttt{``-r''}
-sprawia, iż wyświetlane zostają jedynie podsumowania wyników.
-\linebreak
-\linebreak
-Aby uruchomić wyszukiwarkę w~trybie wsadowym, należy przekierować żądany plik
-na standardowe wejście programu, a~w~celu zachowania wyników, przekierować jego
-standardowe wyjście do pliku przeznaczonego na odpowiedzi:
-\begin{itemize}
-	\item \texttt{./search $<$ zapytania.txt $>$ odpowiedzi.txt[-r]}
-\end{itemize}
-
-\newpage
-
-\section{Pliki}
-
-Katalog \textbf{db/}:
-\begin{itemize}
-	\item \texttt{tokenized} - ztokenizowany plik wikipedii,
-	\item \texttt{artitles} - nazwy tytułów wikipedii,
-	\item \texttt{dictionary} - lista słów wraz z~pozycjami ich list w~plikach
-		indeksów,
-	\item \texttt{lemmatized} - indeks lematyzowany,
-	\item \texttt{positional} - indeks pozycyjny
-	\item \texttt{words\_frequency} - plik zawierający listę wszystkich tokenów
-	\item \texttt{words\_frequency\_per\_article} - plik zawierający listę
-		wszystkich tokenów, wraz z~liczbą artykułów, w~których wystąpiły
-\end{itemize}
-
-\noindent
-Pozostałe katalogi:
-\begin{itemize}
-	\item \texttt{sprawozdanie} - pliki źródłowe \texttt{LaTex} sprawozdania
-	\item \texttt{wiki\_dane/} - pliki wikipedii, morfologika oraz stopwords,
-	\item \texttt{pytania/} - pliki z~zadanymi zapytaniami,
-	\item \texttt{odpowiedzi/} - pliki z~odpowiedziami na zadane zapytania,
-	\item \texttt{czasy/} - informacje o~czasach wyszukiwania, z~programu
-		\texttt{GNU time}, dla zadanych zapytań,
-	\item \texttt{tests/} - skrypty służące sprawdzaniu wyszukiwarki
-\end{itemize}
-
 \end{document}
-
