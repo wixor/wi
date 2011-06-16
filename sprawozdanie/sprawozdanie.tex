@@ -49,13 +49,14 @@ przystąpić do tworzenia indeksu: w tem celu należy wydać polecenie
 \texttt{make the-index}. Skrypt oczekuje położenia danych wejściowych w katalogu
 \texttt{Wiki\_dane} zgodnie z zapisami w pliku Makefile; zapisy te należy
 dostosować do rzeczywistej lokalizacji danych wejściowych. Należy zwrócić uwagę
-na kodowanie nowych linii w plikach, wymagany jest format UNIX; spośród
-dostarczonych materiałów plik \textit{stopwords} wymaga konwersji, można jej
-dokonać używając programu \texttt{fromdos}). Wraz z projektem dostarczony jest
-utworzony indeks. Wreszcie można uruchomić wyszukiwarkę wydając polecenie
-\texttt{./search}. Wyszukiwarka domyślnie pracuje w trybie wsadowym: wczytuje
-zapytania ze standardowego wejścia i wypisuje wyniki na standardowe wyjście;
-można ją zatem przetestować używając polecenia \texttt{./search < queries.txt > answers.txt}.
+na kodowanie znaków w plikach; wymagane jest kodowanie UTF-8 oraz końce linii 
+w stylu UNIX; spośród dostarczonych materiałów plik \textit{stopwords} wymaga
+konwersji końców linii (można jej dokonać używając programu \texttt{fromdos}),
+zaś plik \texttt{pytania.txt} nie jest poprawnym plikiem UTF-8. Wraz z projektem
+dostarczony jest utworzony indeks. Wreszcie można uruchomić wyszukiwarkę wydając
+polecenie \texttt{./search}. Wyszukiwarka domyślnie pracuje w trybie wsadowym:
+wczytuje zapytania ze standardowego wejścia i wypisuje wyniki na standardowe
+wyjście; można ją zatem przetestować używając polecenia \texttt{./search < queries.txt > answers.txt}.
 Wyszukiwarkę można wywołać z następującymi opcjami:\begin{itemize}
   \item \texttt{-v}: tryb szczegółowy, wyszukiwarka wypisuje zachętę do
   wprowadzenia zapytania oraz wiele informacji o przetwarzaniu;
