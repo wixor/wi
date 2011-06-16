@@ -238,8 +238,8 @@ dokumentów przez $D$ oraz zapytanie przez $q$, możemy zdefiniować:
       \sum_t \frac{ \tf{t}{d} \cdot \tf{t}{q} \cdot \idf{t}^2 }{ \|\vec v_q\| \cdot \|\vec v_d\| } \]
 Tak zdefiniowane $\simi{d}{q}$ uważamy za miarę podobieństwa dokumentu $d$
 do zapytania $q$ w modelu przestrzeni wektorowej. Zauważmy, że wartość ta mieści
-sie w przedziale $[0, 1]$. Co więcej, jeżeli $\pi_1(d) \cap \pi_1(q) = \emptyset$, to
-$\simi{d}{q} = 0$, gdyż $\forall t \;.\; \tf{t}{d} = 0 \vee \tf{t}{q} = 0$.
+sie w przedziale $[0, 1]$. Co więcej, jeżeli $\pi_1(d) \cap \pi_1(q) = \emptyset$,
+to $\simi{d}{q} = 0$, gdyż $\forall t \;.\; \tf{t}{d} = 0 \vee \tf{t}{q} = 0$.
 Zatem podobieństwo dokumentów, które nie zawierają żadnego z termów z zapytania
 wynosi zero. Dla pozostałych dokumentów obliczanie powyższej sumy warto wykonywać
 jedynie po termach zawartych w zapytaniu, gdyż dla pozostałych $\tf{t}{q} = 0$.
@@ -258,7 +258,7 @@ dokumentu $d$. Jako, że wartości pagerank reprezentują prawdopodobieństwo
 znalezienia się w danym artykule w wyniku losowego błądzenia, ich wartości 
 są niewielkie (od $10^{-3}$ do $10^{-9}$) i zależą od rozmiaru kolekcji
 dokumentów. Nie nadają się zatem do prostego złożenia z wartościami podobieństwa
-w modelu przestrzeni wektorowej. Dlatego wprowadzono wartość $p(d) = \log (|D| \cdot \mathrm{pagerank}(d))$.
+w modelu przestrzeni wektorowej. Dlatego wprowadzono wartość $p(d) = \log (1+|D| \cdot \mathrm{pagerank}(d))$.
 Mnożenie przez $|D|$ to dzielenie przez $1/|D|$, czyli średnią wartość pagerank,
 przeto wartość $p(d)$ wyraża odchylenie wartości pagerank od średniej.
 Ostatecznie jakość artykułu obliczana jest jako
