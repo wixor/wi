@@ -1632,11 +1632,16 @@ void FreeTextQueryEngine::printResult()
 {
     int n = onlyBestDocs && onlyBestDocs < docCount ? onlyBestDocs : docCount;
     printf("QUERY: %s TOTAL: %d\n", queryText, docCount);
-    if(!noResults)
+    if(noResults)
+        return;
+    if(verbose)
         for(int i=0; i<n; i++) 
             printf("%d: %s (%.2f%%, pagerank: %.3f, score: %e)\n", 
                     i+1, artitles.getTitle(docs[i].docId),
                     100.f*docs[i].weight, artitles.getPageRank(docs[i].docId), docs[i].score());
+    else
+        for(int i=0; i<n; i++) 
+            puts(artitles.getTitle(docs[i].docId));
 }
 
 void FreeTextQueryEngine::do_run(QueryNode *root)
