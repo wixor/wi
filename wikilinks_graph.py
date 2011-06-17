@@ -66,7 +66,8 @@ def wikilinks_graph(wikilinki):
 		f.write(pack('<I', titles_count))
 		for articles_links in outgoing_links:
 			f.write(pack('<H', len(articles_links)))
-            f.write(article_links.tostring())
+			for link in articles_links:
+				f.write(pack('<I', link))
 
 
 def main():
