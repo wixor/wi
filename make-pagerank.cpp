@@ -61,7 +61,7 @@ static void read_links()
             int v = rd.read_u32();
 
             if(n_edges == alloc_edges) {
-                alloc_edges *= 2;
+                alloc_edges += 10 * 1048576; // 10 * 2^20
                 edges = talloc_realloc(NULL, edges, edge, alloc_edges);
                 assert(edges);
             }
