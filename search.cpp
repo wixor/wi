@@ -19,7 +19,7 @@ static bool verbose, noResults, onlyMarkedDocs;
 static int onlyBestDocs;
 static struct {
     float alpha, beta, gamma;
-} freetextWeights = { 1.f, 0.f, 0.f };
+} freetextWeights = { 50.f, 1.f, 10.f };
 
 #define info(fmt, ...) \
     do { if(unlikely(verbose)) printf(fmt, ## __VA_ARGS__); } while (0)

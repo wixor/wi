@@ -266,7 +266,7 @@ Ostatecznie jakość artykułu obliczana jest jako
                          \beta \cdot p(d) +
                          \gamma \cdot \simi{d}{q} \cdot p(d) \]
 Wartości $\alpha, \beta, \gamma$ wyznaczono eksperymentalnie dla uzyskania
-jak najlepszych wyników na $\alpha = ??, \beta = ??, \gamma = ??$. Parametry
+jak najlepszych wyników na $\alpha = 50, \beta = 1, \gamma = 10$. Parametry
 te można zmienić uruchamiając wyszukiwarkę z opcją \texttt{-f}.
 
 \section{Budowanie indeksu}
@@ -435,6 +435,22 @@ i~lematyzacyjnych\footnote{pliki \texttt{db/artitles} -- 24MB,
 300MB pamięci operacyjnej.
 
 \section{Ocena mechanizmu rankingowania dokumentów}
-\textbf{??}
+W~związku z~faktem implementacji obu metod mających na celu poprawę jakości rankingu
+wyników wyszukiwania - \textit{tf\dywiz idf} oraz \textit{Page Rank} - wyzwaniem stało się
+ich optymalne połączenie w~celu uzyskania jak najlepszej kolejności odpowiedzi. Doszliśmy
+do wniosku, iż czynniki zawarte we wzorze:
+\[ \mathrm{score}(d,q) = \alpha \cdot \simi{d}{q} +
+                         \beta \cdot p(d) +
+                         \gamma \cdot \simi{d}{q} \cdot p(d) \]
+wraz z~poprawnie dobranymi współczynnikami $\alpha$, $\beta$ oraz $\gamma$ powinny wystarczyć do
+poprawnego generowania rankingów. Dla tak wybranego wzoru, korzystając z~dostarczonego
+programu do oceniania oraz wzorcowych danych, eksperymentalnie dobrane zostały
+współczynniki $\alpha = 50, \beta = 1, \gamma = 10$.
+Niemniej jednak, dzięki parametrom opcji \textit{-f} przekazywanym do wyszukiwarki
+z~wiersza poleceń, możliwa jest zmiana tychże współczynników tak, aby sprofilować wyniki
+wyszukiwania; np. w~celu znalezienia najpopularniejszych artykułów podobnych do naszego
+zapytania, możemy posłużyć się spostrzeżeniem, iż wartości \textit{Page Rank} są zazwyczaj
+co najmniej o~rząd większe od \textit{sim(d, q)} dzięki czemu ustalając jedynie
+współczynnik $\gamma$ na wartość różną od zera uzyskujemy oczekiwany rezultat.
 
 \end{document}
