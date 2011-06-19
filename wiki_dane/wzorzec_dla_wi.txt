@@ -1,0 +1,600 @@
+QUERY: elektryczne gitary
+Elektryczne Gitary
+Kuba Sienkiewicz
+{
+A ty co
+Wielka radość
+Dzieci wybiegły
+Na krzywy ryj
+}
+Jacek Kleyff
+{
+Live at the Garden
+Dead Infection
+Juliusz Kuźnik
+Sons of Azrael
+}
+
+QUERY: mistrz klawiatury
+{
+Ignacy Jan Paderewski
+Yes
+Antoni Szuniewicz
+}
+Sifo-Dyas
+
+QUERY: asnyk
+Adam Asnyk
+{
+Żelazne Wrota (przełęcze)
+Stanisław Krzemiński
+Jędrzej Wala starszy
+}
+{
+Osiedle Asnyka (osiedle Legnicy)
+V Liceum Ogólnokształcące im. Adama Asnyka w Szczecinie
+Osiedle Adama Asnyka (Kalisz)
+I Liceum Ogólnokształcące im. Adama Asnyka w Kaliszu
+Ulica Legionów w Kaliszu
+Browar Kętrzyn
+Plac Jana Pawła II w Kaliszu
+Ulica Polna w Kaliszu
+Ulica Górnośląska w Kaliszu
+Adam Sztark
+Cmentarz żydowski na Czekaju w Rzeszowie
+Henryk Jedwab
+Jerzy Pertkiewicz
+Jan Walter (duchowny luterański)
+Baruch Kolski
+Architektura Legnicy
+}
+
+QUERY: kostium kąpielowy
+Bikini
+Burkini
+1946
+Trykot
+Marilyn Monroe
+Amy Weber
+Nina Mercedez
+{
+Błąd w prawie cywilnym
+Szał uniesień
+}
+
+QUERY: uzbrojenie gladiatorów
+Hoplomachus
+Bristol Bulldog
+
+QUERY: ciąg rosnący ograniczony
+Aksjomat ciągłości
+Szereg (matematyka)
+Ciąg podstawowy
+Twierdzenie Lebesgue'a o zbieżności monotonicznej
+
+QUERY: arytmetyka presburgera
+Mojżesz Presburger
+Thoralf Skolem
+
+QUERY: programowanie logiczne
+Programowanie logiczne
+Prolog (język programowania)
+Klauzula Horna
+Merkury (język programowania)
+Paradygmat programowania
+Modula
+Programowanie imperatywne
+Trwała struktura danych
+{
+Logiczny typ danych
+Literał logiczny
+Operator (programowanie)
+Jednostka leksykalna
+Perforacja
+Programowanie aspektowe
+RS-232
+Test pokrycia warunków logicznych
+Maszyna RAM
+Python
+}
+
+QUERY: deterministyczny automat skończony
+Deterministyczny automat skończony
+Automat skończony
+Wyrażenie regularne
+Język regularny
+Determinizacja automatu skończonego
+Język formalny
+Lemat o pompowaniu dla języków regularnych
+Twierdzenie Myhilla-Nerode'a
+{
+Niedeterministyczny automat skończony
+Automat Moore'a
+Automat Mealy'ego
+Automat Bchiego
+}
+Teoria obliczalności
+GOLD
+Parser LR
+
+QUERY: wspinaczka piaskowcowa
+Wspinaczka piaskowcowa
+Wspinaczka
+
+QUERY: elektrybałt
+Cyberiada
+Droga do science fiction
+
+QUERY: mickiewicz
+Adam Mickiewicz
+{
+Romantyczność (Mickiewicz)
+Legion Mickiewicza
+}
+{
+Walantyn Mickiewicz
+Telesfor Mickiewicz
+Julian Mickiewicz
+Piotr Mickiewicz
+Władysław Mickiewicz
+}
+{
+Kopiec Adama Mickiewicza w Sanoku
+Liceum Ogólnokształcące Nr III im. Adama Mickiewicza
+Kolumna Adama Mickiewicza we Lwowie
+Chór Akademicki Uniwersytetu im. Adama Mickiewicza
+Gimnazjum im. Adama Mickiewicza w Wilnie
+Osiedle Mickiewicza (Piotrków Trybunalski)
+Batalion im. Adama Mickiewicza
+Ulica Adama Mickiewicza w Słubicach
+Zakład Kultury i Myśli Politycznej Uniwersytetu im. Adama Mickiewicza
+Zakład Historii Europy Wschodniej Uniwersytetu im. Adama Mickiewicza
+Instytut Historii Uniwersytetu im. Adama Mickiewicza
+Instytut Prahistorii Uniwersytetu im. Adama Mickiewicza
+Instytut Historii Sztuki Uniwersytetu im. Adama Mickiewicza
+Instytut Wschodni Uniwersytetu im. Adama Mickiewicza
+Instytut Etnologii i Antropologii Kulturowej Uniwersytetu im. Adama Mickiewicza
+Katedra Muzykologii Uniwersytetu im. Adama Mickiewicza
+Naukowe Koło Chemików Wydziału Chemii Uniwersytetu im. Adama Mickiewicza
+V Liceum Ogólnokształcące im. Adama Mickiewicza w Częstochowie
+Wydział Filozoficzno-Historyczny Uniwersytetu im. Adama Mickiewicza
+Pomnik Adama Mickiewicza w Szczecinie
+Park miejski im. Adama Mickiewicza w Sanoku
+}
+
+QUERY: funkcja pierwotnie rekurencyjna
+Funkcja rekurencyjna
+Teoria obliczeń
+Funkcja Ackermanna
+Funkcja Sudana
+Thoralf Skolem
+
+QUERY: system operacyjny czasu rzeczywistego
+MicroC / OS-II
+System operacyjny czasu rzeczywistego
+{
+RTEMS
+QNX
+VxWorks
+DRYOS
+IRMX
+Phoenix-RTOS
+SenseOS
+ChorusOS
+RTKernel
+}
+Czas rzeczywisty
+System czasu rzeczywistego
+Komputer przemysłowy
+{
+IBM RAD6000
+RAD6000
+}
+{
+Jądro monolityczne
+Jądro systemu operacyjnego
+System rozproszony
+Algorytm szeregowania
+System operacyjny
+MPEG
+Microsoft Windows CE
+Mikrokomputery
+}
+{
+IO.SYS
+Tryb wirtualny
+Europejski Instytut Badań Wirusów Komputerowych
+IA-32
+Microsoft Windows
+}
+
+QUERY: licytacja w brydżu
+Licytacja (brydż)
+Licytacja naturalna
+Licytacja (gry)
+Brydż
+{
+Kontrakt (brydż)
+Kontra Lightnera
+Pas (karty)
+Terminologia brydżowa
+}
+{
+Plafond
+Wist (gra)
+Okszen
+Gra karciana
+}
+
+QUERY: naga kobieta na koniu
+Szał uniesień
+Władysław Podkowiński
+{
+Desmond Morris
+Szpital na perypetiach
+Wilczyca (film)
+}
+
+QUERY: prędkość roweru
+Rower
+Kolarstwo szosowe
+Rower poziomy
+Rower górski
+BMX
+Kolarstwo ekstremalne
+Freeride
+Tour de France
+Trasa rowerowa bulwarów wiślanych
+Ukraina (rower)
+Dynamo rowerowe
+
+QUERY: algorytm kompresji stratnej
+Kompresja stratna
+Kompresja (informatyka)
+JPEG
+Kompresja falkowa
+Bitmapa
+{
+NEF (fotografia)
+AAC
+DVD-Video
+}
+Artefakt (informatyka)
+Mnożenie macierzy
+Musepack
+P2P
+Cyfrowy znak wodny
+
+QUERY: waga słonia
+Cetiozaur
+Czołg super-ciężki
+
+QUERY: analiza niestandardowa
+Ultraprodukt
+{
+Analiza literacka
+SolidWorks
+}
+
+QUERY: myszka bezprzewodowa
+Mighty Mouse
+Wireless USB
+Amiga CDTV
+
+QUERY: czarna wołga
+Czarna wołga
+Miejska legenda
+Wołga GAZ
+Czarne helikoptery
+{
+Miki Mousoleum
+P.O.L.O.V.I.R.U.S.
+}
+Lista odcinków serialu Detektywi
+{
+Niemcy kaukascy
+Dunaj
+Dniepr
+Złota Orda
+Scytowie
+Obwód tambowski
+Farab
+}
+
+QUERY: algorytm sortowania
+Sortowanie
+{
+Sortowanie szybkie
+Sortowanie bąbelkowe
+Sortowanie pozycyjne
+Sortowanie przez scalanie
+Sortowanie przez wstawianie
+Sortowanie przez kopcowanie
+Sortowanie kubełkowe
+}
+Niestabilny algorytm sortowania
+{
+Sortowanie biblioteczne
+Sortowanie introspektywne
+Sortowanie polifazowe
+Sortowanie koktajlowe
+Sortowanie Shella
+Pbit
+Sortowanie zewnętrzne
+Bogosort
+Sortowanie gnoma
+Sortowanie topologiczne
+}
+C.A.R. Hoare
+{
+Algorytm scalania
+Binary Space Partitioning
+Dziel i zwyciężaj
+Algorytm in situ
+Algorytm malarza
+Algorytm Grahama
+Algorytm Kruskala
+}
+Bzip2
+The Art of Computer Programming
+C++
+
+QUERY: masyw sokoliki
+Sokolik
+Góry Sokole
+Trzcińsko
+
+QUERY: film człowiek słoń
+człowiek słoń
+David Lynch
+Joseph Merrick
+Stuart Craig
+Zespół Proteusza
+
+QUERY: ultramaraton
+Ultramaraton
+Marathon des Sables
+Barbara Szlachetka
+Pasmo Bighorn
+
+QUERY: programowanie funkcyjne
+Programowanie funkcyjne
+Wyrażenie (informatyka)
+Rachunek lambda
+{
+Ocaml
+Haskell
+Standard ML
+Scheme
+Common Lisp
+}
+Rekurencja
+Trwała struktura danych
+Currying
+{
+Merkury (język programowania)
+Clojure
+Nemerle
+F Sharp
+Meta Language
+Scala (język programowania)
+XSL
+}
+{
+Python
+Tcl
+Perl
+}
+Unlambda
+Paradygmat programowania
+Programowanie imperatywne
+Iterator
+Algorytm in situ
+Tablica
+Instrukcja (informatyka)
+Lukier składniowy
+Programowanie obiektowe
+{
+MATLAB
+Ingresja
+Boost
+}
+
+QUERY: klauzula horna
+Klauzula Horna
+Prolog (język programowania)
+Klauzula (matematyka)
+{
+CASC
+Klauzula dualna
+}
+
+QUERY: klaudiusz i messalina
+Klaudiusz i Messalina
+Ja, Klaudiusz
+Robert Graves
+Klaudiusz (cesarz)
+Valeria Messalina
+Ja, Klaudiusz (serial telewizyjny)
+1934 w literaturze
+{
+Oktawia (córka Klaudiusza)
+Tytus Flawiusz
+Domicja
+Klaudia Antonia
+Gajusz Apiusz Juniusz Sylan
+Domicja Lepida
+Oktawia
+*Julia Helena
+*Elia Petyna
+*Julia Liwilla
+}
+Incitatus (imię)
+Ireneusz Wójcicki
+
+QUERY: jajko na miękko
+Jajko (kulinaria)
+Jajowar
+Tim Tam
+Dieta wątrobowa
+
+QUERY: walka żuków
+Władysław Starewicz
+{
+Zbrodnia w Hucie Pieniackiej
+Grupy Oporu Solidarni RKW Mazowsze NSZZ Solidarność
+Stanisław Karolkiewicz
+Armia Krajowa
+3 bateria motorowa artylerii przeciwlotniczej
+Stonka ziemniaczana
+}
+
+QUERY: wódka żołądkowa gorzka
+Żołądkowa Gorzka
+Bitters
+Balsam Pomorski
+Bylica piołun
+
+QUERY: boczek wędzony
+Boczek
+{
+Szałot śląski
+Sztufada
+Kapuśniak
+Soul food
+Żur
+}
+Bliny żmudzkie
+
+QUERY: broń gladiatora
+{
+Nagolenniki
+Velles (gladiator)
+Praetorians
+Essedarius
+Trójząb
+Kastet
+Gladius
+}
+{
+Gloster Gladiator
+Gunz The Duel
+Karabin maszynowy Chauchat
+Oko (opowieść)
+Toribash
+World Eaters
+Oscar dla najlepszego aktora drugoplanowego
+Samolot myśliwski
+Gajusz Juliusz Cezar
+Armata kolejowa 13,5-calowa
+Michael Jackson
+Wojna zimowa (1939 - 1940)
+Quo vadis
+}
+
+QUERY: warszawa
+Warszawa
+{
+Historia Warszawy
+Ludność Warszawy
+Podział administracyjny Warszawy
+Zabytki Warszawy
+}
+Aglomeracja warszawska
+Wyższe uczelnie w Warszawie
+{
+Kolumna Zygmunta III Wazy w Warszawie
+Wojskowa Akademia Techniczna im. Jarosława Dąbrowskiego w Warszawie
+Szybka Kolej Miejska w Warszawie
+Zbór Kościoła Bożego w Chrystusie Praga Dla Chrystusa w Warszawie
+}
+
+QUERY: sowa przemądrzała
+Sowa (Kubuś Puchatek)
+Kubuś Puchatek
+Stumilowy Las
+Nowe przygody Kubusia Puchatka
+
+QUERY: piątek z pankracym
+Piątek z Pankracym
+Pankracy
+Hubert Antoszewski
+Zygmunt Kęstowicz
+{
+Maciej Zimiński
+Bohdan Radkowski
+}
+Radiowe i telewizyjne programy dla dzieci
+Archiwalne audycje TVP
+Programy TVP
+
+QUERY: śledzie w śmietanie
+Podróże kulinarne Roberta Makłowicza
+Bliny
+Wielki Post
+
+QUERY: sos majonezowy
+Sos majonezowy
+Sos
+{
+Takoyaki
+Hot dog
+Sałata rzymska
+Czosnek pospolity
+}
+
+QUERY: hipoteza continuum cohen
+Hipoteza continuum
+Paul Cohen
+Forsing
+{
+Teoria mnogości
+Moc zbioru
+Teoria modeli
+}
+Historia matematyki
+
+QUERY: page fault
+Memory management unit
+{
+Page & Plant
+Latter Days: Best of Led Zeppelin Volume Two
+Presence
+Led Zeppelin DVD
+}
+
+QUERY: prus
+Bolesław Prus
+{
+Andrzej Prus
+Maciej Prus
+Prus II Wilczekosy
+Edward Prus
+Marcin Prus
+Anna Prus
+}
+{
+2 Przyboczny Pułk Huzarów im. Królowej Prus Wiktorii
+Amerykańscy ambasadorzy w Królestwie Prus
+3 Pułk Piechoty Królestwa Prus
+4 Pułk Piechoty Królestwa Prus
+}
+
+QUERY: przetwarzanie języka naturalnego
+{
+Synteza mowy
+Bank drzew
+Korpus (językoznawstwo)
+Text mining
+}
+Modular Audio Recognition Framework
+Analiza zstępująca
+{
+Instytut Informatyki im. Maxa Plancka
+Institut national des Langues et Civilisations orientales
+Biblioteka Inżynierii Oprogramowania
+Bot (IRC)
+Językoznawstwo
+}
+Przypisanie
+
