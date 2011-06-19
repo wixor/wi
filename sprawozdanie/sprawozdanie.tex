@@ -399,22 +399,34 @@ zbuforowanych podczas poprzednich wyszukiwań.
 \paragraph{Tokenizacja}
 Pierwszym krokiem na drodze do wygenerowania wszystkich, niezbędnych dla
 wyszukiwarki, indeksów jest tokenizacja pliku Wikipedii. Jej całkowity czas
-działania nieznacznie przekracza \textbf{??} minut, co wynika z~faktu, iż wymagane jest
+działania nieznacznie przekracza \textbf{12} minut, co wynika z~faktu, iż wymagane jest
 dekodowanie pliku do \textit{UTF-8} w~celu prawidłowego rozpoznawania
 wszystkich znaków. Czas tokenizacji Wikipedii na komputerze z~pracowni numer 7
-(Intel Core i3 CPU 3.07GHz, 4GB ramu, Ubuntu, i686-linux-gnu) wynosi około \textbf{??}
+(Intel Core i3 CPU 3.07GHz, 4GB ramu, Ubuntu, i686-linux-gnu) wynosi około \textbf{7:30}
 minut.
 
 \paragraph{Generowanie indeksów}
-Ta część przetwarzania ztokenizowanej Wikipedii zajmuje niewiele ponad \textbf{??}
+Ta część przetwarzania ztokenizowanej Wikipedii zajmuje niewiele ponad \textbf{20}
 minut, z~czego najwięcej czasu zabiera proces odwracania, czyli
 sortowania tymczasowych list postingowych zdigitalizowanej Wikipedii. Czas
 generowania indeksów jest zdecydowanie mniejszy na komputerach z~pracowni numer
-7 -- około \textbf{??} minut -- czego główną przyczyną jest spora ilość pamięci RAM,
+7 -- około \textbf{4} minut -- czego główną przyczyną jest spora ilość pamięci RAM,
 która umożliwia systemowi operacyjnemu efektywne buforowanie plików pośrednich.
 
+\paragraph{Page rank}
+Aby wzbogadzić wyszukiwarkę o~możliwość rankingowania wyników przy pomocy metody
+\textit{Page Rank}, podobnie jak w~przypadku tokenizacji Wikiedii, zaczynamy od
+zdigitalizowania pliku \textit{wikilinki.txt} w~ten sposób, iż nazwy wszystkich artykułów
+występujących w~Wikipedii zostały zastąpione ich numerami porządkowym z~pliku
+\textit{db/artitles}, a~nowym tytułom nadano kolejne, wolne numery. Całkowity czas
+trwania tego procesu wyniósł \textbf{6:30} minuty.
+\footnote{3:40 minuty - pracownia nr~7}
+Właściwy proces generowania \textit{Page Rank'u} przy pomocy metody
+\textit{power~iteration} zajął \textbf{28} sekundy dla \textbf{73} iteracji.
+\footnote{23 sekundy - pracownia nr~7}
+
 \paragraph{Czas rozruchu}
-Czas potrzebny wyszukiwarce na rozruch, wynoszący około \textbf{??} sekundy, wynika
+Czas potrzebny wyszukiwarce na rozruch, wynoszący około \textbf{8} sekundy, wynika
 głównie z~potrzebny wczytania plików zawierających listę wszystkich tytułów
 artykułów oraz listę wszystkich słów pozyskanych z~Wikipedii i~morfologika wraz
 z~długościami, a~także pozycjami w~plikach indeksów, ich list postingowych
